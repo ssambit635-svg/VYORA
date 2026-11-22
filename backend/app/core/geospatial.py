@@ -68,8 +68,8 @@ def decode_sar(payload: bytes, filename: str, content_type: str | None = None) -
                         raise ImageValidationError("GeoTIFF needs two bands in the documented order: VV band 1, VH band 2.")
                     if dataset.width * dataset.height > MAX_IMAGE_PIXELS:
                         raise ImageValidationError("GeoTIFF dimensions are too large for the local demo.")
-                    vv = dataset.read(1, masked=True).filled(np.nan)
-                    vh = dataset.read(2, masked=True).filled(np.nan)
+                    vv = dataset.read(1, masked=True).astype(np.float32).filled(np.nan)
+                    vh = dataset.read(2, masked=True).astype(np.float32).filled(np.nan)
                     profile = dataset.profile.copy()
                     crs = dataset.crs.to_string() if dataset.crs else None
                     transform = tuple(dataset.transform)[:6]
@@ -124,6 +124,7 @@ def geotiff_bytes(rgb: np.ndarray, profile: dict) -> bytes:
     source_transform = profile.get("transform")
     out_profile.pop("blockxsize", None)
     out_profile.pop("blockysize", None)
+    out_profile.pop("nodata", None)
     out_profile.update(driver="GTiff", count=3, dtype="uint8", width=width, height=height, compress="deflate", photometric="RGB")
     if source_transform is not None:
         sx = profile["width"] / width

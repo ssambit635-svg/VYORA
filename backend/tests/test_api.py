@@ -61,14 +61,14 @@ def test_demo_inference_and_exports(client):
 def test_dual_polarization_geotiff_round_trip(client):
     profile = {
         "driver": "GTiff", "height": 32, "width": 24, "count": 2,
-        "dtype": "float32", "crs": "EPSG:32645", "transform": from_origin(500000, 2200000, 10, 10),
+        "dtype": "int16", "nodata": -9999, "crs": "EPSG:32645", "transform": from_origin(500000, 2200000, 10, 10),
     }
     with MemoryFile() as mem:
         with mem.open(**profile) as ds:
-            ds.write(np.stack([
-                np.tile(np.linspace(0, 1, 24, dtype=np.float32), (32, 1)),
-                np.tile(np.linspace(1, 0, 24, dtype=np.float32), (32, 1)),
-            ]))
+            vv = np.tile(np.linspace(0, 1000, 24, dtype=np.int16), (32, 1))
+            vh = np.tile(np.linspace(1000, 0, 24, dtype=np.int16), (32, 1))
+            vv[0, 0] = vh[0, 0] = -9999
+            ds.write(np.stack([vv, vh]))
         payload = mem.read()
 
     response = client.post("/api/infer", files={"file": ("pair.tif", payload, "image/tiff")})
