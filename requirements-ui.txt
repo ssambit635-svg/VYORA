@@ -1,0 +1,3 @@
+# Optional deck-aligned Streamlit interface; the React/FastAPI UI is also retained.
+-r backend/requirements.txt
+streamlit>=1.35,<2.0

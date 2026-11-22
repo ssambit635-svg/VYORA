@@ -1,4 +1,8 @@
+> **Project note (21 Nov 2026):** this specification was written under the working name **DrishtiSAR**. The repository product is now branded **VYORA**; read every reference to DrishtiSAR below as Vyora. The problem statement (HK26-PS-19) and requirements are unchanged. Implementation status and any deviations are recorded in [IMPLEMENTATION_DECISIONS.md](IMPLEMENTATION_DECISIONS.md).
+
 # DrishtiSAR — Project Details
+
+> **Controlling scope (21 Nov 2026):** follow the attached Voltrix deck: prepared Sentinel-1 VV/VH dual-pol GeoTIFF → paired Sentinel-2 visible target → compact 2→3 channel U-Net baseline → side-by-side review and geospatial preview export. Streamlit is the deck-aligned interface. Older single-channel assumptions in this specification are legacy text. No real paired subset or trained checkpoint is currently bundled; do not present the fallback as AI output.
 
 **Project:** DrishtiSAR  
 **Tagline:** From radar texture to confidence-aware geographic interpretation.  
@@ -8,13 +12,13 @@
 
 ## 1. Project summary
 
-DrishtiSAR is a deep-learning web application that transforms a grayscale SAR image into an **AI-estimated colour geographic interpretation**. The interface is intended to reduce the entry barrier for people who are not SAR specialists.
+Vyora is a local-first geospatial visual-interpretation prototype planned to map prepared **Sentinel-1 VV/VH dual-polarization** input to an estimated Sentinel-2-style RGB layer. The current default run is a labelled development fallback: there is no trained checkpoint or paired dataset bundled yet.
 
 The app displays more than a colourized output. It makes three questions visible:
 
 1. **What structure did the SAR image contain?** — original SAR image.
 2. **What geographic appearance does the model estimate?** — colour interpretation output.
-3. **How much should a user trust each region?** — confidence/uncertainty overlay and feature-likelihood estimates.
+3. **How stable is the generated appearance under a simple view change?** — flip-view consistency cue and palette shares, explicitly not calibrated probabilities or land-cover labels.
 
 The final prototype is designed around a coastal/disaster-response demonstration but remains useful for urban, agricultural, and water-body scenes.
 
@@ -31,7 +35,7 @@ The challenge asks for deep-learning colourization that improves visual interpre
 ## 3. Proposed solution
 
 ### Product statement
-> DrishtiSAR learns a mapping from paired SAR and optical reference patches. It converts a supported SAR input into an estimated colour interpretation, displays feature likelihoods and confidence, and helps users compare the output to the original radar structure.
+> Vyora is intended to learn a mapping from paired Sentinel-1 VV/VH and Sentinel-2 visible patches. The training-data and checkpoint milestone is not yet complete; until then, the demo is a clearly labelled product-flow prototype.
 
 ### Main differentiators
 
@@ -68,9 +72,9 @@ A response analyst receives a SAR scene from a cloudy coastal region. An optical
 
 | Input | MVP support | Notes |
 |---|---|---|
-| Curated grayscale SAR scene | Required | Ensures a reliable hackathon demonstration |
-| PNG/JPEG single-channel image | Required | Intended for a small, documented set of SAR-like inputs |
-| GeoTIFF / Sentinel product | Optional stretch | Requires reliable normalization and metadata handling |
+| Prepared Sentinel-1 dual-pol GeoTIFF | Target input | VV/VH order and CRS/affine metadata; physical calibration must happen upstream |
+| Paired Sentinel-2 visible target | Required for training | Must be cloud-screened, co-registered, scaled and legally reusable |
+| Synthetic grayscale preview | UI fallback only | Duplicated into two channels; not real SAR or dual-pol evidence |
 | Scene metadata | Optional | Scene name, source/date, polarization, location label; no user location required |
 
 ### Outputs
@@ -126,7 +130,7 @@ Responsive result view
 ## 7. ML design
 
 ### Baseline model
-A compact **U-Net or ResU-Net encoder-decoder** maps normalized single-channel SAR tiles to three-channel RGB-style targets.
+A compact **U-Net/ResU-Net encoder-decoder** maps normalized, paired VV/VH tiles (2 input channels) to a three-channel Sentinel-2-style visible target. The trained checkpoint is not yet available.
 
 This is deliberately selected over a large GAN/transformer/diffusion model because it is:
 - more likely to train stably in the available time;
