@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Large / private ML assets
+*.pt
+*.pth
+*.ckpt
+ml/checkpoints/
+ml/data/raw/
+data/raw/
+data/private/
+
+# OS / editor
+.DS_Store
+*.log
+.env

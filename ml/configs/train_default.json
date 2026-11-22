@@ -1,0 +1,17 @@
+{
+  "version": "resunet-vv-vh-v0.1",
+  "manifest": "data/manifests/tiles.json",
+  "checkpoint": "backend/checkpoints/vyora_resunet.pt",
+  "tile_size": 256,
+  "base_channels": 24,
+  "batch_size": 8,
+  "epochs": 20,
+  "lr": 0.001,
+  "seed": 42,
+  "num_workers": 0,
+  "use_cuda": false,
+  "w_colour": 1.0,
+  "w_ssim": 0.2,
+  "w_edge": 0.1,
+  "input_channels": 2
+}

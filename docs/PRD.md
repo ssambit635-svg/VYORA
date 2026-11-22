@@ -1,4 +1,8 @@
+> **Project note (21 Nov 2026):** this specification was written under the working name **DrishtiSAR**. The repository product is now branded **VYORA**; read every reference to DrishtiSAR below as Vyora. The problem statement (HK26-PS-19) and requirements are unchanged. Implementation status and any deviations are recorded in [IMPLEMENTATION_DECISIONS.md](IMPLEMENTATION_DECISIONS.md).
+
 # DrishtiSAR — Product Requirements Document
+
+> **Scope supersession (21 Nov 2026):** the attached Voltrix presentation is the controlling product scope. Use paired Sentinel-1 VV/VH as the two-channel input, Sentinel-2 visible targets, U-Net first, region-grouped evaluation, GeoTIFF handling, and Streamlit as the presentation UI. Earlier paragraphs below that say single-channel PNG/JPEG-only or treat GeoTIFF as a stretch goal are legacy MVP notes and are superseded by this scope. Current implementation gaps are listed in `PPT_ALIGNMENT_AND_SELECTION_GUIDE.md`.
 
 **Version:** 0.1 (Hackathon MVP)  
 **Status:** Approved concept  
@@ -39,16 +43,15 @@ A plain image colourization demo is insufficient because visually plausible colo
 
 ## 4. Product goals
 
-### Primary goals
-1. Accept a prepared single-channel SAR image (`.png`, `.jpg`, `.jpeg`; GeoTIFF is a stretch goal).
-2. Preprocess the image and run a locally hosted deep-learning inference model.
-3. Produce an estimated three-channel colour interpretation image.
-4. Display input and output using a before/after comparison slider.
-5. Show feature-likelihood values for **water**, **vegetation**, **built-up**, and **bare/other**.
-6. Show a per-pixel or tiled **confidence/uncertainty map**.
-7. Show model/runtime metadata and structure-preservation metrics for prepared evaluation scenes.
-8. Work in a responsive phone browser while the model runs on a local laptop server.
-9. Require no paid API, subscription, or cloud GPU for demo inference.
+### Primary goals (deck-aligned)
+1. Accept prepared, co-registered two-band Sentinel-1 GeoTIFF input (VV band 1, VH band 2); PNG/JPEG are preview-only fallbacks.
+2. Normalize the two input channels and run the locally saved U-Net checkpoint when available.
+3. Estimate a three-channel Sentinel-2-style visible output; never call it recovered true colour.
+4. Preserve the original SAR view and geospatial extent/CRS alongside the output.
+5. Compare input and output, export PNG/JSON and an explicitly labelled 256×256 GeoTIFF preview.
+6. Show a clearly caveated flip-view consistency layer and palette-derived feature shares (neither calibrated uncertainty nor learned land-cover classes).
+7. Work with the deck-aligned Streamlit interface; the alternate React/FastAPI app is optional.
+8. Require no paid API, subscription or hosted inference service.
 
 ### Secondary goals
 - Demonstrate a coastal Odisha / cyclone-response use case with curated sample imagery.
@@ -98,12 +101,12 @@ The app must provide at least four prepared scenes:
 **Acceptance:** A user can obtain a full result without uploading a file.
 
 ### FR-02: File input and validation
-The app must accept PNG/JPEG SAR demo images up to a defined safe size (target: 10 MB). It must reject unsupported file types with a helpful message.
+The app accepts prepared two-band GeoTIFF (VV band 1, VH band 2; up to 50 MB) and small PNG/JPEG interface previews (up to 10 MB). It rejects malformed or unsupported inputs with a helpful message. GeoTIFF must already be radiometrically calibrated, terrain-corrected and co-registered; those physical preprocessing steps are not performed by the current code.
 
 **Acceptance:** Invalid files do not reach model inference and show an actionable error.
 
 ### FR-03: Preprocessing
-The backend must normalize the SAR image into a model-compatible single-channel tensor and resize/crop it to the inference tile size (target: `256 × 256`). Optional lightweight despeckling may be used if it improves results consistently.
+The pipeline must validate two aligned VV/VH bands, apply documented independent robust normalization, optionally median-filter, and resize both channels to `256 × 256`. Preserve source CRS/extent for the preview export. Do not describe percentile scaling as radiometric calibration.
 
 **Acceptance:** The same prepared input returns a deterministic, valid tensor and result.
 
@@ -113,14 +116,14 @@ The app must load a saved model checkpoint and infer an RGB-style colour interpr
 **Acceptance:** A prepared scene completes inference within a target of 10 seconds on the demonstration laptop.
 
 ### FR-05: Interpretability layers
-The result must display four normalized likelihood scores: water, vegetation, built-up, and bare/other. These may be calculated from a lightweight auxiliary prediction head or documented colour/feature mapping.
+The optional four-category display is a fixed palette-derived share from the generated RGB, not a supervised class head.
 
-**Acceptance:** Scores are visible, sum approximately to 100%, and are labelled as model estimates.
+**Acceptance:** Shares sum to 100% and are labelled as palette-derived visual indicators, not model class probabilities or validated segmentation.
 
-### FR-06: Confidence display
-The result must show an uncertainty/confidence view. The first MVP may use model confidence from softmax probabilities or variation across test-time augmentations/Monte Carlo dropout.
+### FR-06: Consistency display
+The result may show agreement across original/flipped inference views as a visual consistency cue.
 
-**Acceptance:** The app clearly labels high-, medium-, and low-confidence regions and does not describe confidence as ground truth.
+**Acceptance:** The app explicitly says this is not calibrated uncertainty or real-world correctness. A learned/calibrated confidence model is out of scope until it has valid supervision and calibration evidence.
 
 ### FR-07: Comparison experience
 The user must be able to compare input and output via a slider and toggle the confidence layer.

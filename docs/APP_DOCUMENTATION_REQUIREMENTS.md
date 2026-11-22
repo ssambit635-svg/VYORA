@@ -1,4 +1,8 @@
+> **Project note (21 Nov 2026):** this specification was written under the working name **DrishtiSAR**. The repository product is now branded **VYORA**; read every reference to DrishtiSAR below as Vyora. The problem statement (HK26-PS-19) and requirements are unchanged. Implementation status and any deviations are recorded in [IMPLEMENTATION_DECISIONS.md](IMPLEMENTATION_DECISIONS.md).
+
 # DrishtiSAR — Application Documentation Requirements
+
+> **Vyora deck scope (21 Nov 2026):** the team presentation supersedes older single-channel suggestions below: prepared Sentinel-1 VV/VH GeoTIFF input, paired Sentinel-2 visible RGB target, compact 2→3 channel U-Net, geographic scene-group holdout, Streamlit interface, and CRS/extent-aware preview export. See `PPT_ALIGNMENT_AND_SELECTION_GUIDE.md` for status, caveats and judge-facing wording.
 
 This document defines the documents and evidence required for a credible hackathon submission. The goal is not to create paperwork for its own sake; it is to ensure the team can prove that DrishtiSAR is a real, responsible AI/ML prototype.
 
