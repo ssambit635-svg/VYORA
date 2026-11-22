@@ -55,7 +55,7 @@ python -m ml.src.evaluate --manifest data/manifests/tiles.json \
   --checkpoint backend/checkpoints/vyora_resunet.pt --output docs/evaluation_results.json
 ```
 
-See [Data card](docs/DATA_CARD.md), [Model card](docs/MODEL_CARD.md), and [Evaluation](docs/EVALUATION.md). Held-out results are currently **not run**; temporary smoke data is not evidence and no smoke metrics are claimed.
+See [ML status](docs/ML_STATUS.md), [Data card](docs/DATA_CARD.md), [Model card](docs/MODEL_CARD.md), and [Evaluation](docs/EVALUATION.md). Held-out results are currently **not run**; temporary smoke data is not evidence and no smoke metrics are claimed.
 
 ## Documentation
 

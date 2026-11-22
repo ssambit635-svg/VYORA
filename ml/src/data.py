@@ -8,6 +8,7 @@ GeoTIFF pairs must be co-registered before being added to a manifest.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +31,7 @@ def _paths(row: dict) -> tuple[str, ...]:
 
 
 def build_manifest(rows: list[dict], output_path: str | Path, root: str | Path | None = None) -> Path:
-    root = Path(root) if root else Path(output_path).parent
+    root = Path(root).resolve() if root else Path(output_path).parent.resolve()
     seen_ids: set[str] = set()
     group_splits: dict[str, str] = {}
     for i, row in enumerate(rows):
@@ -66,26 +67,45 @@ def build_manifest(rows: list[dict], output_path: str | Path, root: str | Path |
                 raise ManifestError("Install rasterio to validate GeoTIFF pairing and grid alignment.") from exc
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"version": "2.0", "tiles": rows}, indent=2) + "\n", encoding="utf-8")
+    root_reference = os.path.relpath(root, output.parent.resolve())
+    output.write_text(
+        json.dumps({"version": "2.1", "root": root_reference, "tiles": rows}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return output
 
 
 def load_manifest(path: str | Path) -> list[dict]:
-    with Path(path).open("r", encoding="utf-8") as fh:
-        rows = json.load(fh)["tiles"]
-    # Revalidate leakage and file references at consumption time.
+    manifest_path = Path(path).resolve()
+    with manifest_path.open("r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    rows = payload["tiles"]
+    root = Path(payload.get("root", "."))
+    if not root.is_absolute():
+        root = (manifest_path.parent / root).resolve()
+    # Resolve rows relative to their declared data root, not the caller's CWD.
     group_splits: dict[str, str] = {}
     ids: set[str] = set()
     for row in rows:
+        if row.get("split") not in VALID_SPLITS:
+            raise ManifestError(f"Tile {row.get('tile_id')} has an invalid split {row.get('split')!r}.")
         if row["tile_id"] in ids:
             raise ManifestError(f"Duplicate tile_id: {row['tile_id']}")
         ids.add(row["tile_id"])
         old = group_splits.setdefault(row["scene_group"], row["split"])
         if old != row["split"]:
             raise ManifestError(f"Scene group {row['scene_group']!r} leaks across splits.")
-        for item in _paths(row):
-            if not Path(item).is_file():
-                raise ManifestError(f"Missing manifest image: {item}")
+        for key in _paths(row):
+            image_path = Path(key)
+            if not image_path.is_absolute():
+                image_path = root / image_path
+            if not image_path.is_file():
+                raise ManifestError(f"Missing manifest image: {image_path}")
+        for key in ("sar_vv_path", "sar_vh_path", "sar_path", "optical_path"):
+            if key in row:
+                image_path = Path(row[key])
+                if not image_path.is_absolute():
+                    row[key] = str((root / image_path).resolve())
     return rows
 
 
@@ -100,7 +120,7 @@ def _read_image(path: str | Path, bands: tuple[int, ...] | None = None) -> np.nd
             indexes = bands or tuple(range(1, min(ds.count, 3) + 1))
             if max(indexes) > ds.count:
                 raise ValueError(f"{path} has {ds.count} bands, needs {indexes}.")
-            data = ds.read(indexes, masked=True).filled(np.nan)
+            data = ds.read(indexes, masked=True).astype(np.float32).filled(np.nan)
         return np.moveaxis(data, 0, -1)
     with Image.open(path) as img:
         if bands:

@@ -6,9 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PIL import Image
+import rasterio
+from rasterio.transform import from_origin
 
 from backend.app.core.geospatial import preprocess_pair
-from ml.src.data import ManifestError, build_manifest, normalise_sar_pair
+from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_sar_pair, optical_target
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():
@@ -37,6 +39,44 @@ def test_paired_png_manifest_smoke_inputs(tmp_path: Path):
     pair = normalise_sar_pair({key: str(tmp_path / loaded[key]) for key in ("sar_vv_path", "sar_vh_path")} | {"tile_id": "tile-1"}, size=16)
     assert pair.shape == (16, 16, 2)
     assert not np.allclose(pair[..., 0], pair[..., 1])
+
+
+def test_int16_geotiff_training_pair_handles_nodata_and_alignment(tmp_path: Path):
+    transform = from_origin(500000, 2200000, 10, 10)
+    profile = {"driver": "GTiff", "width": 12, "height": 10, "dtype": "int16",
+               "crs": "EPSG:32645", "transform": transform, "nodata": -9999}
+    vv_path, vh_path, rgb_path = (tmp_path / n for n in ("vv.tif", "vh.tif", "rgb.tif"))
+    for path, count in ((vv_path, 1), (vh_path, 1), (rgb_path, 3)):
+        with rasterio.open(path, "w", **profile, count=count) as ds:
+            for band in range(1, count + 1):
+                values = np.full((10, 12), 1000 * band, dtype=np.int16)
+                values[0, 0] = -9999
+                ds.write(values, band)
+    row = {"tile_id": "geo-1", "scene_group": "region-1", "split": "train",
+           "sar_vv_path": "vv.tif", "sar_vh_path": "vh.tif", "optical_path": "rgb.tif",
+           "optical_scale": 10000, "source": "synthetic test", "licence": "test-only"}
+    manifest = build_manifest([row], tmp_path / "manifests/tiles.json", root=tmp_path)
+    loaded = load_manifest(manifest)[0]
+    sar = normalise_sar_pair(loaded, size=16)
+    target = optical_target(loaded, size=16)
+    assert sar.shape == (16, 16, 2) and target.shape == (16, 16, 3)
+    assert np.isfinite(sar).all() and np.isfinite(target).all()
+
+
+def test_manifest_resolves_relative_paths_from_declared_data_root(tmp_path: Path):
+    data_root = tmp_path / "data"
+    raw = data_root / "raw"
+    raw.mkdir(parents=True)
+    Image.fromarray(np.zeros((8, 8), dtype=np.uint8)).save(raw / "sar.png")
+    Image.fromarray(np.zeros((8, 8, 3), dtype=np.uint8)).save(raw / "rgb.png")
+    manifest_path = data_root / "manifests" / "tiles.json"
+    row = {"tile_id": "tile", "scene_group": "scene", "split": "train",
+           "sar_path": "raw/sar.png", "optical_path": "raw/rgb.png",
+           "source": "unit", "licence": "synthetic"}
+    build_manifest([row], manifest_path, root=data_root)
+    loaded = load_manifest(manifest_path)
+    assert Path(loaded[0]["sar_path"]).is_absolute()
+    assert Path(loaded[0]["optical_path"]).is_file()
 
 
 def test_manifest_rejects_scene_group_split_leakage(tmp_path: Path):

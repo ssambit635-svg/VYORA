@@ -6,7 +6,7 @@ Record format: date / tester / environment / result / notes.
 
 | Date | Test | Environment | Result | Notes |
 |---|---|---|---|---|
-| 21 Nov 2026 | `pytest backend/tests ml/tests -q` (11 tests) | Python 3.11, FastAPI TestClient, Rasterio, PyTorch CPU | **PASS** | API honesty; synthetic scene flow; TIFF VV/VH round-trip with CRS/bounds preservation; upload validation; dual-channel preprocessing; manifest leakage rejection; 2→3 ResU-Net shape |
+| 21 Nov 2026 | `pytest backend/tests ml/tests -q` (13 tests) | Python 3.11, FastAPI TestClient, Rasterio, PyTorch CPU | **PASS** | API honesty; synthetic scene flow; Int16 TIFF VV/VH round-trip with NoData + CRS/bounds; training-pair alignment and relative manifest-root checks; upload validation; dual-channel preprocessing; split-leakage rejection; 2→3 ResU-Net shape |
 | 21 Nov 2026 | `npm run build` | Node 22, Vite 6.4.6, TypeScript strict | **PASS** | 181.5 kB JS / 22 kB CSS bundle generated with no type errors |
 | 21 Nov 2026 | Live server smoke tests | Uvicorn `0.0.0.0:8000`, Streamlit `0.0.0.0:8501`, curl | **PASS** | API health/demo/inference and Streamlit home return 200; Streamlit AppTest ran the synthetic scene with no exceptions |
 | 21 Nov 2026 | Regenerate demo data | `scripts/generate_demo_scenes.py` | **PASS** | Four deterministic 256×256 synthetic PNGs and manifest produced |
