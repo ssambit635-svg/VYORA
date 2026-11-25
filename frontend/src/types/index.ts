@@ -5,6 +5,8 @@ export interface Health {
   mode: Mode
   model_version: string
   is_ai_inference: boolean
+  input_representation: string
+  accepted_model_input: string
   checkpoint_available: boolean
   torch_available: boolean
   runner_note: string

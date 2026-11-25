@@ -42,6 +42,7 @@ class RunnerStatus:
     mode: str
     model_version: str
     is_ai_inference: bool
+    input_representation: str
     checkpoint_available: bool
     torch_available: bool
     reason: str
@@ -58,6 +59,7 @@ class _BaseRunner:
 
 
 class DevelopmentRunner(_BaseRunner):
+    input_representation = "development_preview"
     confidence_method = "deterministic local consistency of hand-authored rules (not model uncertainty)"
     feature_method = "mean of hand-authored backscatter/texture memberships (not validated segmentation)"
 
@@ -102,6 +104,8 @@ class CheckpointRunner(_BaseRunner):
         input_channels = int(saved.get("input_channels", 2))
         self.input_channels = input_channels
         self.input_representation = str(saved.get("input_representation", "VV_VH_pair"))
+        if self.input_representation != "VV_VH_pair":
+            self.feature_method = "not provided: this image-to-image checkpoint has no land-cover classification head"
         self.model_version = str(saved.get("version", "resunet-unversioned"))
         self.model = build_model(base_channels=base, input_channels=input_channels)
         self.model.load_state_dict(state)
@@ -126,18 +130,22 @@ class CheckpointRunner(_BaseRunner):
         rgb = 0.5 * (rgb + rgb_flip)
         confidence = np.clip(agreement, 0.02, 0.995).astype(np.float32)
 
-        # Fixed palette lookup is explanatory UI only; it is not a learned class head.
-        palette = feature_mapping.PALETTE
-        flat = rgb.reshape(-1, 3)
-        distances = ((flat[:, None, :] - palette[None, ...]) ** 2).sum(axis=2)
-        nearest = np.argmin(distances, axis=1).reshape(rgb.shape[:2])
-        counts = np.bincount(nearest.ravel(), minlength=4).astype(np.float32)
-        counts = np.maximum(counts, 1e-4)
-        shares = counts / counts.sum()
-        feature_estimates = {label: float(shares[i]) for i, label in enumerate(FEATURE_LABELS)}
-
-        total = sum(feature_estimates.values())
-        feature_estimates = {k: round(v / total, 6) for k, v in feature_estimates.items()}
+        # PNG prototype has no validated class labels; do not manufacture class
+        # shares from its RGB output. The legacy dual-pol demo may display only
+        # palette-derived explanatory shares, never learned class probabilities.
+        if self.input_representation == "VV_VH_pair":
+            palette = feature_mapping.PALETTE
+            flat = rgb.reshape(-1, 3)
+            distances = ((flat[:, None, :] - palette[None, ...]) ** 2).sum(axis=2)
+            nearest = np.argmin(distances, axis=1).reshape(rgb.shape[:2])
+            counts = np.bincount(nearest.ravel(), minlength=4).astype(np.float32)
+            counts = np.maximum(counts, 1e-4)
+            shares = counts / counts.sum()
+            feature_estimates = {label: float(shares[i]) for i, label in enumerate(FEATURE_LABELS)}
+            total = sum(feature_estimates.values())
+            feature_estimates = {k: round(v / total, 6) for k, v in feature_estimates.items()}
+        else:
+            feature_estimates = {}
         colour = np.round(np.clip(rgb, 0, 1) * 255).astype(np.uint8)
         return InferenceOutput(
             colour=colour,
@@ -195,7 +203,46 @@ def runner_status() -> RunnerStatus:
         mode=runner.mode,
         model_version=runner.model_version,
         is_ai_inference=runner.is_ai_inference,
+        input_representation=runner.input_representation,
         checkpoint_available=CHECKPOINT_PATH.is_file(),
         torch_available=torch_available(),
         reason=_runner_reason,
     )
+
+
+def evaluation_status_for_model(model_version: str, is_ai_inference: bool) -> str:
+    """Only claim the report when the exact evaluated checkpoint is active."""
+    if not is_ai_inference:
+        return "not_evaluated"
+    if model_version == "resunet-paired-png-prototype-v0.2-b-to-a":
+        return "documented_200_tile_subset_geographic_independence_unverified"
+    return "not_evaluated_for_this_checkpoint"
+
+
+def incompatible_input_message(
+    runner: _BaseRunner,
+    input_kind: str,
+    filename: str | None = None,
+    *,
+    is_synthetic_demo: bool = False,
+) -> str | None:
+    """Return an actionable error when a checkpoint's training input differs."""
+    if not runner.is_ai_inference:
+        return None  # the labelled development fallback accepts previews for UI testing
+    representation = str(getattr(runner, "input_representation", ""))
+    is_png_model = representation.startswith("grayscale_") and representation.endswith("_PNG_duplicated")
+    if is_png_model and is_synthetic_demo:
+        return "The synthetic gallery is not a paired training example. Upload a grayscale PNG from the paired dataset for this checkpoint."
+    if is_png_model and input_kind == "geotiff-vv-vh":
+        return (
+            "This checkpoint was trained on grayscale paired PNG tiles, not separate VV/VH bands. "
+            "Upload a PNG tile or select a VV/VH-trained checkpoint."
+        )
+    if is_png_model and filename and Path(filename).suffix.lower() != ".png":
+        return "This checkpoint expects a PNG tile from the paired dataset; JPEG/other preview formats are not accepted."
+    if representation == "VV_VH_pair" and input_kind == "single-channel-preview-duplicated":
+        return (
+            "This checkpoint expects distinct VV and VH bands. A single-channel PNG/JPEG preview "
+            "is not genuine dual-polarization input."
+        )
+    return None

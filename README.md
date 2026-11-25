@@ -18,11 +18,14 @@ Vyora is an early image-to-image prototype. Folder audit shows A PNGs usually ca
 
 ## Run the React + FastAPI prototype locally
 
-Install Python dependencies once from the repository root:
+Install runtime dependencies once from the repository root (PyTorch is separate from `backend/requirements.txt`):
 
 ```powershell
 python -m pip install -r backend/requirements.txt
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
+
+Skip the PyTorch install if the active environment already has the compatible version used for training. Use the official PyTorch selector for a CUDA build.
 
 In one PowerShell window from the repository root, select the corrected checkpoint and start the API:
 
@@ -103,4 +106,4 @@ The B input is grayscale and the A target carries colour in the sampled data, bu
 - [Architecture](docs/ARCHITECTURE.md) · [Technical stack](docs/TECH_STACK.md) · [API](docs/API.md)
 - [PPT alignment & selection plan](docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md)
 - [Demo script](docs/DEMO_SCRIPT.md) · [Test checklist](docs/TEST_CHECKLIST.md)
-- [Install/troubleshooting](docs/INSTALL.md) · [Licences](docs/LICENSES_AND_ATTRIBUTION.md)
+- [Install/troubleshooting](docs/INSTALL.md) · [Final training runbook](docs/FINAL_TRAINING_RUNBOOK.md) · [Licences](docs/LICENSES_AND_ATTRIBUTION.md)

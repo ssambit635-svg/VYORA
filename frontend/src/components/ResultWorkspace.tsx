@@ -94,8 +94,10 @@ export function ResultWorkspace({ result, onReset }: Props) {
               <div><span>Model version</span><strong>{result.model_version}</strong></div>
               <div>
                 <span>Held-out evaluation</span>
-                <strong className={result.metrics.held_out_evaluation === 'not_run' ? 'warn-text' : ''}>
-                  {result.metrics.held_out_evaluation === 'not_run' ? 'Not run' : 'See report'}
+                <strong className="warn-text">
+                  {result.metrics.held_out_evaluation === 'documented_200_tile_subset_geographic_independence_unverified'
+                    ? '200-tile subset; geography unverified'
+                    : 'Not evaluated for this checkpoint'}
                 </strong>
               </div>
             </div>

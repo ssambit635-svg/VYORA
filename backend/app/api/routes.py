@@ -23,7 +23,7 @@ from app.core.config import (
 from app.core.metrics import confidence_summary, edge_agreement
 from app.core.geospatial import decode_sar, geotiff_bytes, preprocess_pair
 from app.core.preprocess import ImageValidationError, to_display_array
-from app.ml.model_runner import get_runner, runner_status
+from app.ml.model_runner import evaluation_status_for_model, get_runner, incompatible_input_message, runner_status
 
 router = APIRouter(prefix="/api")
 _results: dict[str, dict] = {}
@@ -82,6 +82,14 @@ def health() -> dict:
         "mode": status.mode,
         "model_version": status.model_version,
         "is_ai_inference": status.is_ai_inference,
+        "input_representation": status.input_representation,
+        "accepted_model_input": (
+            "grayscale paired PNG tile (single channel duplicated to two model channels)"
+            if status.input_representation.startswith("grayscale_")
+            else "two distinct VV/VH channels"
+            if status.is_ai_inference
+            else "image previews for labelled interface testing only; no trained model input contract"
+        ),
         "checkpoint_available": status.checkpoint_available,
         "torch_available": status.torch_available,
         "runner_note": status.reason,
@@ -150,9 +158,11 @@ async def infer(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     runner = get_runner()
-    input_representation = str(getattr(runner, "input_representation", ""))
-    if input_representation.startswith("grayscale_") and input_representation.endswith("_PNG_duplicated") and decoded.input_kind == "geotiff-vv-vh":
-        raise HTTPException(status_code=400, detail="This PNG prototype checkpoint expects a grayscale PNG input. It is not compatible with dual-band GeoTIFF input.")
+    incompatibility = incompatible_input_message(
+        runner, decoded.input_kind, filename, is_synthetic_demo=(source_kind == "demo")
+    )
+    if incompatibility:
+        raise HTTPException(status_code=400, detail=incompatibility)
     output = runner.infer(tile)
     runtime_ms = round((time.perf_counter() - started) * 1000, 1)
 
@@ -196,7 +206,7 @@ async def infer(
             "runtime_ms": runtime_ms,
             "input_output_edge_agreement_proxy": structural_proxy,
             "edge_method": "Pearson correlation of log Sobel-like gradients (structure proxy, not accuracy)",
-            "held_out_evaluation": "not_run" if not output.is_ai_inference else "see docs/EVALUATION.md",
+            "held_out_evaluation": evaluation_status_for_model(output.model_version, output.is_ai_inference),
         },
         "disclaimer": DISCLAIMER,
         "privacy": "Uploaded bytes were processed in memory and not written to disk.",

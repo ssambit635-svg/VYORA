@@ -95,6 +95,32 @@ def score_one(pred: np.ndarray, target: np.ndarray) -> dict[str, float | None]:
     }
 
 
+def manifest_input_representation(rows: list[dict]) -> str:
+    """Infer the model contract from manifest metadata; reject ambiguous input."""
+    png_rows = [row for row in rows if "A/B PNG export" in row.get("source", "")]
+    if png_rows:
+        sides = {row.get("input_side") for row in png_rows}
+        if len(sides) != 1 or None in sides:
+            raise ValueError("PNG evaluation manifest must declare one consistent input_side.")
+        side = next(iter(sides))
+        if side not in {"A", "B"}:
+            raise ValueError(f"Unsupported PNG input_side: {side!r}.")
+        return f"grayscale_{side}_PNG_duplicated"
+    if any(
+        row.get("sar_vv_path") or row.get("sar_vh_path") or row.get("vv_band") or row.get("vh_band")
+        for row in rows
+    ):
+        return "VV_VH_pair"
+    raise ValueError("Cannot infer manifest input representation; expected A/B PNG side metadata or explicit VV/VH fields.")
+
+
+def validate_checkpoint_manifest(saved: dict, rows: list[dict]) -> None:
+    expected = manifest_input_representation(rows)
+    actual = str(saved.get("input_representation", "VV_VH_pair"))
+    if actual != expected:
+        raise ValueError(f"Checkpoint expects {actual}, but evaluation manifest provides {expected}.")
+
+
 def _mean_scores(scores: list[dict[str, float | None]]) -> dict:
     if not scores:
         return {"tiles": 0, "MAE_L1": None, "PSNR_dB": None, "PSNR_perfect_tiles": 0, "SSIM": None, "edge_preservation": None}
@@ -166,6 +192,9 @@ def main() -> None:
             saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
         except TypeError:
             saved = torch.load(checkpoint, map_location="cpu")
+        if not isinstance(saved, dict) or "state_dict" not in saved:
+            raise ValueError("checkpoint does not contain a state_dict")
+        validate_checkpoint_manifest(saved, rows)
         model = build_model(int(saved.get("base_channels", 24)), input_channels=int(saved.get("input_channels", 2)))
         model.load_state_dict(saved["state_dict"])
         model.eval()

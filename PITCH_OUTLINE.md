@@ -1,17 +1,17 @@
-# Voltrix deck presenter notes — aligned to the attached PDF
+# Voltrix deck presenter notes
 
-This file gives spoken notes for the existing 9-slide deck; it does not alter the presentation. Do not present proposed work as completed. See `docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md` for the serious gaps and selection priorities.
+The actual source PDF is not stored in this checkout. These notes should be checked against the final slide deck before presenting. Use the current scope/evidence in `docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md` and do not present future work as complete.
 
-1. **Title / team:** State HK26-PS-19 and team names. Before submission, replace `[ADD TEAM ID]` and `[ADD PS CODE]` with the official values.
-2. **Problem:** SAR records backscatter, not visible colour. Brightness depends on roughness, moisture, geometry and polarization; the slide illustration is synthetic, not a satellite scene.
-3. **Solution:** Planned mapping is prepared Sentinel-1 VV/VH to Sentinel-2-style visible imagery using paired examples. Explain that this is an estimate and keep the original SAR for review.
-4. **Stack:** Streamlit UI, Rasterio/NumPy for geospatial I/O, PyTorch U-Net baseline. Current app normalizes prepared input but does not radiometrically calibrate or terrain-correct it.
-5. **Architecture:** Scene-group split, U-Net training and held-out metrics. The code path exists; actual paired-data training and evaluation are not yet complete.
-6. **Role of AI:** Only call it learned inference after loading a team-trained checkpoint. Current default is a deterministic development fallback; there are no real-data metrics.
-7. **Difference:** VV/VH input, structural skip connections, paired optical-style target, and original-SAR comparison are the intended contribution. Do not claim validated feature segmentation or calibrated uncertainty.
-8. **Impact/future:** Describe beneficiaries as intended users, not measured impact. Next work: lawful data preparation, expert review, held-out evaluation, model checkpoint and comprehension testing.
-9. **Team:** Confirm the official Team ID, PS code, names and roll numbers.
+1. **Title / team:** State PS code HK26-PS-19; verify official Team ID, names, and any placeholders against event registration.
+2. **Problem:** Explain that SAR records microwave backscatter, not visible colour. If a slide uses an illustration, identify whether it is synthetic or real source imagery.
+3. **Current demo:** The trained checkpoint shown today is grayscale B-side PNG → paired A-side image estimate. The channel audit does not verify sensor identity or prove VV/VH-to-optical mapping.
+4. **Stack:** The accepted live interface is React/Vite + FastAPI. Streamlit exists as an optional alternate. If the submitted deck says Streamlit, correct the slide or deliberately rehearse that version.
+5. **Model:** Compact ResU-Net, 2 model input channels to 3 output channels. For this checkpoint, the two inputs are duplicates of one grayscale PNG channel, not separate VV/VH.
+6. **Evidence:** On 200 of 4,576 supplied test tiles (seed 42), B→A ResU-Net MAE was 0.09632 vs 0.35373 for the simple baseline; SSIM was 0.67069 vs 0.24769. Folder split geographic independence was not independently verified.
+7. **Failure / limitations:** Average prediction RGB spread was 0.03778 vs target 0.13053; some outputs remain under-coloured. A green-looking example does not prove true colour, geography, or operational value.
+8. **Consistency / features:** Flip-view agreement is not calibrated uncertainty. The current PNG model has no water, vegetation, building, or land-cover classifier.
+9. **Future:** A genuine licensed VV/VH→optical training run, verified geographic holdout, source/licence review, and phone/offline rehearsal remain future milestones.
 
-## Safe answer if asked for accuracy
+## Safe answer if asked whether Vyora restores real colour
 
-“We do not have a real held-out result to report yet. The current output in this demo is development mode unless we show our own trained checkpoint and saved evaluation report. We will report only metrics tied to a region-separated test set.”
+“No. The current checkpoint predicts pixels resembling paired A-side PNG targets from grayscale B-side PNG inputs. It is an early prototype, and the source/sensor semantics and geographic independence are not verified. The output is not true-colour ground truth or a decision product.”

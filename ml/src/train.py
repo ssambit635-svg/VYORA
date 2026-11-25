@@ -5,7 +5,7 @@ import argparse
 import csv
 import json
 import random
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 
@@ -48,6 +48,22 @@ def _atomic_save(torch, payload: dict, path: Path) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def _safe_artifact_reference(path: str | Path) -> str:
+    """Keep private workstation directories out of portable checkpoints."""
+    raw_path = str(path)
+    candidate = Path(path).expanduser()
+    try:
+        if PureWindowsPath(raw_path).is_absolute() and not candidate.is_absolute():
+            raise ValueError("Windows absolute path outside this platform")
+        resolved = candidate.resolve()
+        return resolved.relative_to(ROOT.resolve()).as_posix()
+    except (OSError, ValueError):
+        # Split both separators so metadata remains safe when Windows paths are
+        # inspected or rewritten on another operating system.
+        basename = raw_path.replace("\\", "/").rstrip("/").split("/")[-1]
+        return f"external:{basename or 'manifest'}"
 
 
 def main() -> None:
@@ -295,7 +311,7 @@ def main() -> None:
                         if png_prototype else "Paired VV/VH raster input"
                     ),
                     "epoch": epoch, "validation_loss": float(val_loss), "seed": seed,
-                    "manifest": str(manifest_path), "train_tiles": len(groups["train"]),
+                    "manifest": _safe_artifact_reference(manifest_path), "train_tiles": len(groups["train"]),
                     "validation_tiles": len(groups["validation"]),
                     "fine_tuned_from": resume_path.name if resume_path else None,
                 }
