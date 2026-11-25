@@ -2,16 +2,16 @@
 
 **HK26-PS-19 — Deep Learning-Based SAR Image Colorization & Geospatial Visual Interpretation**
 
-> **Honest status:** this repository contains a 19.2 MB legacy checkpoint, but the latest audit found its A→B training direction used grayscale targets. It is **not a valid colourization model**. The corrected B→A training path is being added; it needs a fresh local run on the user's data before the app can show a validated colour estimate. The 34 GB archive is not bundled.
+> **Honest status:** the repository contains the legacy A→B checkpoint and the corrected 19.2 MB B→A PNG prototype checkpoint. The corrected model beats a simple baseline on a 200-tile subset, but its colours remain muted and the A/B sensor semantics/geographic independence are unverified. It is not a verified VV/VH or geospatial model. The 34 GB archive is not bundled.
 
 ## Project
 
-Vyora is an early image-to-image prototype. Folder audit shows A PNGs usually carry colour and B PNGs are grayscale; the corrected experiment is **grayscale B-side input → A-side image estimate**. This is based only on image-channel statistics, not verified sensor metadata. The current checkpoint has the reverse mapping and should not be presented as successful colourization.
+Vyora is an early image-to-image prototype. Folder audit shows A PNGs usually carry colour and B PNGs are grayscale; the current experiment is **grayscale B-side input → A-side image estimate**. This direction is based only on image-channel statistics, not verified sensor metadata. The model output is still under-coloured and is not ground truth.
 
 ## Deck-aligned stack and interfaces
 
 - **React/Vite + FastAPI** local web app with image upload, model inference, before/after slider, consistency overlay, and PNG/JSON export.
-- PyTorch compact ResU-Net generator; corrected training manifest direction is grayscale B-side input → A-side target, subject to source verification.
+- PyTorch compact ResU-Net generator; current checkpoint uses grayscale B-side input → A-side target, subject to source verification.
 - Offline training/evaluation scripts; the evaluation report compares against a simple baseline and saves failure-case panels.
 - Optional GeoTIFF code path exists for compatible dual-band inputs/checkpoints, but it is **not compatible with the current PNG-trained checkpoint**.
 - No paid APIs/cloud services; inference currently runs on the user's laptop, not a public hosted service.
@@ -24,9 +24,10 @@ Install Python dependencies once from the repository root:
 python -m pip install -r backend/requirements.txt
 ```
 
-In one PowerShell window, start the API:
+In one PowerShell window from the repository root, select the corrected checkpoint and start the API:
 
 ```powershell
+$env:VYORA_CHECKPOINT = "$PWD\backend\checkpoints\vyora_resunet_b_to_a.pt"
 python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 ```
 
@@ -38,20 +39,21 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-Open the local URL Vite prints (usually `http://localhost:5173`). The API docs are at `http://localhost:8000/docs`. Keep both windows running. The checkpoint is tracked in Git at `backend/checkpoints/vyora_resunet.pt`; the raw image archive is not.
+Open the local URL Vite prints (usually `http://localhost:5173`). The API docs are at `http://localhost:8000/docs`. Keep both windows running. The corrected checkpoint is `backend/checkpoints/vyora_resunet_b_to_a.pt`; the raw image archive and tile manifest are not in Git.
 
 
 ## Input contract and safe interpretation
 
-- **Legacy checkpoint input:** a 256×256 grayscale-converted A-side PNG. It was trained against grayscale B targets and is not a valid colourization checkpoint.
-- **Corrected experiment:** use grayscale B-side PNG as input and A-side PNG as target; both are duplicated/decoded according to the explicit manifest mapping. This still does not establish real VV/VH or geospatial input.
+- **Current checkpoint input:** a 256×256 grayscale B-side PNG, duplicated into two model channels; output estimates the paired A-side image.
+- The legacy A→B checkpoint remains for history, but it was trained against grayscale B targets and is not a valid colourization checkpoint.
+- The current B→A mapping is based on channel statistics, not verified sensor provenance; it does not establish genuine VV/VH or geospatial input.
 - A separate GeoTIFF pathway exists in code, but it is not compatible with this PNG-trained checkpoint. It requires a compatible dual-band checkpoint and already calibrated/co-registered input.
 - A PNG has no map CRS/transform, so its result cannot be a georeferenced map. The optional GeoTIFF export is a model-size preview, not a full-resolution analytical raster.
 - The flip-view cue is method consistency, not calibrated uncertainty. Palette shares are not learned land-cover labels.
 
 ## Data and model status
 
-The team's paired A/B PNG archive is local and **not bundled with this repository**. A 100-image-per-folder audit found A mostly colour-bearing and B grayscale. The manifest builder now defaults to B-input/A-target; this direction still needs visual/source verification and a fresh training run. It is not a verified Sentinel-1/Sentinel-2 GeoTIFF training product. For a separate GeoTIFF experiment, use the [official dataset page](https://mediatum.ub.tum.de/1474000) and keep the Toolbox clone's `splits/` lists available.
+The team's paired A/B PNG archive is local and **not bundled with this repository**. A 100-image-per-folder audit found A mostly colour-bearing and B grayscale. The corrected B-input/A-target model was trained and evaluated on a limited subset; metrics and caveats are in [Evaluation](docs/EVALUATION.md). The exact source semantics and licence still need verification. This is not a verified Sentinel-1/Sentinel-2 GeoTIFF training product. For a separate GeoTIFF experiment, use the [official dataset page](https://mediatum.ub.tum.de/1474000) and keep the Toolbox clone's `splits/` lists available.
 
 First inspect a real matched pair (this prints band descriptions/tags, raw-value percentiles, CRS and transforms):
 
@@ -95,19 +97,7 @@ Then inspect a pair before training:
 python scripts/inspect_png_pair.py --manifest data/manifests/tiles.json --tile-id test-ROIs1868_summer_s000131_p000746
 ```
 
-Confirm the B input is grayscale and the A target has non-zero RGB spread and is visually the intended reference. The old A-input/B-target checkpoint is the wrong direction and must **not** be fine-tuned. When the pair is confirmed, train from scratch to a separate file:
-
-```powershell
-python -m ml.src.train --config ml/configs/train_default.json --epochs 5 --max-train-tiles 1000 --max-validation-tiles 200 --output-checkpoint backend/checkpoints/vyora_resunet_b_to_a.pt
-```
-
-This limited CPU run previously took over 30 minutes and may still underfit. Then evaluate the new checkpoint before switching the app to it:
-
-```powershell
-python -m ml.src.evaluate --manifest data/manifests/tiles.json --checkpoint backend/checkpoints/vyora_resunet_b_to_a.pt --max-test-tiles 200 --seed 42 --output docs/evaluation_results_b_to_a.json --examples-dir docs/evaluation_examples_b_to_a
-```
-
-Do not promote a checkpoint unless target pairing is verified and held-out examples/metrics support the change. PNGs have no map coordinates, and the 34 GB source archive should stay out of Git.
+The B input is grayscale and the A target carries colour in the sampled data, but source/sensor semantics still need verification. The corrected checkpoint is already trained and tracked at `backend/checkpoints/vyora_resunet_b_to_a.pt`. The reported 200-tile subset metrics and important muted-colour failure cases are recorded in `docs/EVALUATION.md`. Keep the test split out of model selection, do not upload the 34 GB archive or local manifest, and do not describe the output as true colour or a verified map.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) · [Technical stack](docs/TECH_STACK.md) · [API](docs/API.md)
