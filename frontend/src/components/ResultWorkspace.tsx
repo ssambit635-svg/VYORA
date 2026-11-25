@@ -34,7 +34,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
           <span>{isDev
             ? 'Output comes from fixed, hand-authored backscatter rules used to demonstrate the product flow. No trained model is running and no accuracy claim is made.'
             : isPngPrototype
-              ? `Output comes from the local ${result.model_version} checkpoint trained on grayscale A-side PNG tiles. A was duplicated into two model channels; this is not separate VV/VH input.`
+              ? `Output comes from the local ${result.model_version} checkpoint trained on paired PNG tiles with grayscale input duplicated into two model channels. This is not separate VV/VH input.`
               : `Output was produced by the local ${result.model_version} checkpoint. The consistency cue comes from flipped-view agreement; it is not calibrated uncertainty.`}
           </span>
         </div>
@@ -58,7 +58,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
               showConfidence={showConfidence}
               position={position}
               onPosition={setPosition}
-              inputLabel={isPngPrototype ? 'A-SIDE PNG' : 'VV/VH INPUT'}
+              inputLabel={isPngPrototype ? 'GRAYSCALE PNG' : 'VV/VH INPUT'}
               outputLabel={isPngPrototype ? 'MODEL ESTIMATE' : 'INTERPRETATION'}
             />
             <div className="compare-foot">
@@ -74,7 +74,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
           {isPngPrototype ? (
             <div className="panel prototype-note">
               <h3>What this prototype predicts</h3>
-              <p>It predicts RGB-style pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
+              <p>It predicts image pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
             </div>
           ) : (
             <FeatureCards estimates={result.feature_estimates} method={result.feature_method} />

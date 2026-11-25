@@ -75,6 +75,15 @@ def main() -> None:
     except Exception as exc:
         parser.exit(2, f"Training cannot start: manifest/data validation failed: {exc}\n")
 
+    png_rows = [row for row in rows if "A/B PNG export" in row.get("source", "")]
+    png_prototype = bool(png_rows)
+    png_input_side = None
+    if png_prototype:
+        input_sides = {row.get("input_side") for row in png_rows}
+        if len(input_sides) != 1 or None in input_sides:
+            parser.exit(2, "PNG manifest is missing a consistent input_side. Regenerate it with scripts/prepare_png_split_manifest.py; the current archive audit points to --input-side B.\n")
+        png_input_side = str(next(iter(input_sides)))
+
     groups: dict[str, list[dict]] = {}
     for row in rows:
         groups.setdefault(row["split"], []).append(row)
@@ -111,8 +120,9 @@ def main() -> None:
         split: PairedTileDataset(items, size=size, augment=(split == "train"))
         for split, items in groups.items()
     }
-    # Read one row from each split before creating a checkpoint, so common TIFF,
-    # band, scale, and preprocessing problems produce a short actionable message.
+    # Read sample rows from each split before creating a checkpoint, so common
+    # TIFF, band, scale and PNG target-colour problems fail with a short message.
+    png_target_spreads: list[float] = []
     for split in ("train", "validation", "test"):
         if split not in datasets or not len(datasets[split]):
             continue
@@ -125,12 +135,17 @@ def main() -> None:
             saturation = float(((target <= 0.001) | (target >= 0.999)).float().mean())
             if saturation > 0.98:
                 raise ValueError(f"{saturation:.1%} of the optical target is clipped to 0/1; check optical band order and optical_scale")
+            if png_prototype:
+                spread = float((target.max(dim=0).values - target.min(dim=0).values).mean())
+                png_target_spreads.append(spread)
         except Exception as exc:
             tile_id = groups[split][0].get("tile_id", "unknown tile")
             parser.exit(2, f"Data preflight failed for {split} tile {tile_id}: {exc}\nCheck band indexes, scaling and TIFF readability.\n")
 
-    png_prototype = any("A/B PNG export" in row.get("source", "") for row in rows)
-    expected_representation = "grayscale_A_PNG_duplicated" if png_prototype else "VV_VH_pair"
+    if png_prototype and png_target_spreads and float(np.mean(png_target_spreads)) < 0.005:
+        parser.exit(2, "PNG targets are effectively grayscale in train/validation/test samples. Verify A/B direction; for this archive try --input-side B so the colour-bearing A side is the target. No checkpoint was changed.\n")
+
+    expected_representation = f"grayscale_{png_input_side}_PNG_duplicated" if png_prototype else "VV_VH_pair"
     resume_path = _resolve(args.resume_checkpoint) if args.resume_checkpoint else None
     saved_checkpoint = None
     model_base_channels = int(config.get("base_channels", 24))
@@ -247,18 +262,27 @@ def main() -> None:
 
             if np.isfinite(val_loss) and val_loss < best:
                 best, best_epoch, stale = val_loss, epoch, 0
-                default_version = ("resunet-sen12ms-paired-png-prototype-v0.1" if png_prototype else "resunet-v0.1")
+                target_side = "A" if png_input_side == "B" else "B"
+                default_version = (
+                    f"resunet-paired-png-prototype-v0.2-{png_input_side.lower()}-to-{target_side.lower()}"
+                    if png_prototype else "resunet-v0.1"
+                )
                 configured_version = str(config.get("version", ""))
-                if png_prototype and configured_version.startswith("resunet-vv-vh"):
+                if png_prototype:
                     configured_version = ""
                 version = configured_version or default_version
                 if resume_path and not version.endswith("-finetuned"):
                     version += "-finetuned"
                 checkpoint = {
                     "state_dict": model.state_dict(), "base_channels": model_base_channels,
-                    "input_channels": 2, "input_representation": "grayscale_A_PNG_duplicated" if png_prototype else "VV_VH_pair",
+                    "input_channels": 2, "input_representation": expected_representation,
+                    "input_side": png_input_side,
+                    "target_side": ("A" if png_input_side == "B" else "B") if png_prototype else None,
                     "version": version,
-                    "training_note": "A grayscale PNG duplicated into two channels; prototype only; not independently verified VV/VH." if png_prototype else "Paired VV/VH raster input",
+                    "training_note": (
+                        f"Grayscale {png_input_side}-side PNG duplicated into two channels; paired {('A' if png_input_side == 'B' else 'B')}-side PNG target; prototype only, not verified VV/VH."
+                        if png_prototype else "Paired VV/VH raster input"
+                    ),
                     "epoch": epoch, "validation_loss": float(val_loss), "seed": seed,
                     "manifest": str(manifest_path), "train_tiles": len(groups["train"]),
                     "validation_tiles": len(groups["validation"]),

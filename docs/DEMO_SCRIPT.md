@@ -2,23 +2,23 @@
 
 ## Before the room
 
-- Start the FastAPI backend and React/Vite frontend; check the `PNG PROTOTYPE` status and confirm a checkpoint is loaded.
-- Keep one 256×256 A-side PNG ready. Do not use a B-side target as the model input.
-- Turn the consistency layer **off** initially so the judge sees the model estimate, not the green agreement overlay.
-- Have `docs/EVALUATION.md` open for the exact test-subset evidence and caveats.
+- Start the FastAPI backend and React/Vite frontend.
+- **Do not present the legacy checkpoint as colourization:** it was trained A→B, while the folder audit found B grayscale and A colour-bearing.
+- For a corrected demo, first regenerate the manifest B→A, verify one pair with `scripts/inspect_png_pair.py`, train a new checkpoint and inspect held-out panels. The new checkpoint must actually be selected by the API before the demo.
+- Keep one verified grayscale input PNG ready and have `docs/EVALUATION.md` open. Do not imply that PNGs have map coordinates or verified VV/VH channels.
 
-## Talk track
+## Talk track after a corrected checkpoint is validated
 
-**Problem (20 sec):** “Radar imagery is powerful but difficult to read visually. We built a local prototype that learns an image-to-image mapping from paired A/B tiles.”
+**Problem (20 sec):** “Radar-like grayscale imagery can be hard to scan. We are testing whether paired image learning can produce a useful colour-style visual aid.”
 
-**Method (30 sec):** “This version takes a grayscale A-side PNG, duplicates it into two model channels, and predicts RGB-style pixels. It is not yet a verified Sentinel-1 VV/VH or map-coordinate workflow.”
+**Method (30 sec):** “In this experiment, B is the grayscale input and A is the colour-bearing paired target, based on our folder audit. These are PNGs, so this does not verify sensor identity, VV/VH channels or geospatial coordinates.”
 
-**Demo (45 sec):** Upload the A-side tile, run inference, and move the slider between input and estimate. Toggle the consistency layer to show prediction stability under a flip; explain that stability is not confidence or accuracy. Download the PNG and JSON if asked.
+**Demo (45 sec):** Upload the verified grayscale input, run inference, and move the slider between input and estimate. Toggle the consistency layer to show prediction stability under a flip; explain that stability is not confidence or accuracy. Download the PNG and JSON if asked.
 
-**Evidence (30 sec):** “On a 200-tile subset of the supplied test split, the ResU-Net scored MAE 0.155, PSNR 15.73 dB and SSIM 0.446, compared with a simple pseudocolour baseline at MAE 0.226 and SSIM 0.241. This is similarity to paired PNG targets—not proof of true-colour recovery or geographic correctness. The folder split's geographic independence is unverified.”
+**Evidence (30 sec):** Show only the corrected checkpoint's report, with its split, hardware, target references and failure examples. The earlier 200-tile report used the reversed direction and is not a colourization benchmark.
 
-**Limits and next step (20 sec):** “The checkpoint was trained on 1,000 tiles for five CPU epochs, so its colours can be muted. Our next validation step is to compare model predictions with the paired B-side references, fine-tune without touching the test set, and only keep a new model if held-out results improve.”
+**Limits (20 sec):** “This is an early visual estimate, not true-colour recovery, a map, land-cover classification or an emergency warning. We need better data provenance, geographic holdout and expert validation.”
 
-## If something fails
+## If corrected training is not complete
 
-Say clearly that the local prototype is unavailable rather than presenting a screenshot as live inference. Do not claim that a synthetic scene or a consistency percentage is model accuracy.
+Present the app as a **pipeline demonstration only**, not as a successful colorization result. Show the folder audit and explain that the old checkpoint was trained in the wrong direction. Do not hide this by toggling or recolouring the output.

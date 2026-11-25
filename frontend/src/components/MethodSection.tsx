@@ -1,8 +1,8 @@
 import { ArrowRight, Binary, Gauge, Layers, ScanLine, ShieldAlert } from 'lucide-react'
 
 const PNG_PIPELINE = [
-  { icon: ScanLine, title: 'Paired PNG input', text: 'The supplied A-side grayscale tile is read as one channel and duplicated to fit this prototype model.' },
-  { icon: Binary, title: 'ResU-Net model', text: 'A compact supervised encoder–decoder predicts RGB-style pixels from the grayscale A-side tile.' },
+  { icon: ScanLine, title: 'Paired PNG input', text: 'The selected grayscale side is read as one channel and duplicated to fit the prototype model.' },
+  { icon: Binary, title: 'ResU-Net model', text: 'A compact supervised encoder–decoder predicts pixels from the paired image side.' },
   { icon: Gauge, title: 'Consistency cue', text: 'Original-versus-flipped prediction agreement is shown as a stability cue, not calibrated uncertainty.' },
   { icon: Layers, title: 'Review & export', text: 'Compare the input and estimate with the slider; export the 256×256 PNG and JSON summary.' },
 ]
@@ -51,7 +51,7 @@ export function MethodSection({ pngPrototype = false }: { pngPrototype?: boolean
           <div className="limit-list">
             <div><ShieldAlert size={19} /><div><strong>No ground-truth claims</strong><span>Visual similarity is not geographic accuracy. Always verify with authoritative imagery and local knowledge.</span></div></div>
             <div><ShieldAlert size={19} /><div><strong>{pngPrototype ? 'PNG prototype limits' : 'Synthetic demo scenes'}</strong><span>{pngPrototype
-              ? 'The current checkpoint uses grayscale A-side PNG tiles duplicated into two input channels; the input PNG has no map coordinates.'
+              ? 'The PNG prototype duplicates its grayscale input into two model channels; PNG files have no map coordinates.'
               : 'Bundled scenes are procedurally generated illustrations, not real satellite captures or georeferenced products.'}</span></div></div>
             <div><ShieldAlert size={19} /><div><strong>Consistency is not confidence</strong><span>Agreement under a flip measures method stability, not certainty about the real world.</span></div></div>
             <div><ShieldAlert size={19} /><div><strong>Domain shift is real</strong><span>Sensor, polarisation, resolution and season all affect results. Arbitrary satellite images are not guaranteed to work.</span></div></div>

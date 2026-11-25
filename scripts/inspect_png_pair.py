@@ -41,9 +41,11 @@ def main() -> int:
     if row is None:
         parser.error(f"Tile not found in manifest: {args.tile_id}")
 
-    a_path = Path(row.get("sar_vv_path") or row.get("sar_path", ""))
-    b_path = Path(row["optical_path"])
-    for label, path in (("A input", a_path), ("B target", b_path)):
+    input_path = Path(row.get("sar_vv_path") or row.get("sar_path", ""))
+    target_path = Path(row["optical_path"])
+    input_side = row.get("input_side", "unspecified")
+    target_side = row.get("target_side", "unspecified")
+    for label, path in ((f"Input ({input_side}-side)", input_path), (f"Target ({target_side}-side)", target_path)):
         if not path.is_file():
             parser.error(f"{label} file is missing: {path.name}")
         mode, size, means, spread = _stats(path)

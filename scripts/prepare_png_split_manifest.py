@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build a Vyora manifest from paired train_A/B, val_A/B, and test_A/B PNG folders."""
+"""Build a manifest from paired train_A/B, val_A/B, and test_A/B PNG folders.
+
+For the current archive, folder audits show B is grayscale and A carries colour,
+so B -> A is the default direction. Use --input-side A only for a different
+package whose A side is the intended grayscale source.
+"""
 from __future__ import annotations
 
 import argparse
@@ -33,11 +38,35 @@ def _split_dirs(root: Path, split: str) -> tuple[Path, Path]:
     raise ManifestError(f"Could not find {split}_A and {split}_B folders below {root}.")
 
 
+def pair_row(key: str, split: str, a_path: Path, b_path: Path, root: Path,
+             input_side: str, licence: str) -> dict:
+    """Make an explicit source→target row, keeping the folder side in metadata."""
+    if input_side == "B":
+        input_path, target_path = b_path, a_path
+    else:
+        input_path, target_path = a_path, b_path
+    return {
+        "tile_id": f"{split}-{key}",
+        # Split-qualified groups avoid claiming geographic separation we have not checked.
+        "scene_group": f"{split}:{key}",
+        "split": split,
+        "input_side": input_side,
+        "target_side": "A" if input_side == "B" else "B",
+        "sar_vv_path": input_path.relative_to(root).as_posix(),
+        "sar_vh_path": input_path.relative_to(root).as_posix(),
+        "optical_path": target_path.relative_to(root).as_posix(),
+        "source": f"SEN12MS A/B PNG export; input_side={input_side}; folder pairing used as supplied",
+        "licence": licence,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True, type=Path,
                         help="Folder containing train_A/train_B, val_A/val_B, test_A/test_B")
     parser.add_argument("--output", default=str(ROOT / "data/manifests/tiles.json"))
+    parser.add_argument("--input-side", choices=("A", "B"), default="B",
+                        help="Which side is the grayscale model input (default B, based on the current archive audit)")
     parser.add_argument("--licence-note", required=True,
                         help="Record the dataset source/terms that apply to this downloaded package")
     args = parser.parse_args()
@@ -60,19 +89,7 @@ def main() -> int:
                     f"{sorted(missing_b)[:3]} / {sorted(missing_a)[:3]}"
                 )
             for key in sorted(a_files):
-                tile_id = f"{split}-{key}"
-                rows.append({
-                    "tile_id": tile_id,
-                    # The source package's directory splits are trusted as provided.
-                    # Split-qualified groups avoid falsely asserting geographic separation.
-                    "scene_group": f"{split}:{key}",
-                    "split": split,
-                    "sar_vv_path": a_files[key].relative_to(root).as_posix(),
-                    "sar_vh_path": a_files[key].relative_to(root).as_posix(),
-                    "optical_path": b_files[key].relative_to(root).as_posix(),
-                    "source": "SEN12MS A/B PNG export; folder pairing used as supplied",
-                    "licence": args.licence_note,
-                })
+                rows.append(pair_row(key, split, a_files[key], b_files[key], root, args.input_side, args.licence_note))
     except ManifestError as exc:
         parser.error(str(exc))
 
@@ -84,8 +101,9 @@ def main() -> int:
         parser.error(f"Could not write/validate manifest: {exc}")
     print(f"Manifest: {manifest}")
     print(f"Paired PNG tiles: {len(verified)}; split counts: {dict(Counter(r['split'] for r in verified))}")
-    print("Prototype assumptions: A is treated as grayscale input (duplicated into two model channels); B is treated as RGB target.")
-    print("This uses the supplied folder splits; it does not verify VV/VH encoding, geospatial metadata, or geographic independence.")
+    target_side = "A" if args.input_side == "B" else "B"
+    print(f"Prototype mapping: grayscale {args.input_side}-side PNG input (duplicated into two channels) -> {target_side}-side RGB-style target.")
+    print("This uses the supplied folder splits; it does not verify sensor/polarization encoding, geospatial metadata, geographic independence, or licence terms.")
     return 0
 
 

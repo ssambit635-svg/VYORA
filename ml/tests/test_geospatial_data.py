@@ -16,6 +16,7 @@ from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_
 from ml.src.evaluate import _mean_scores, _panel, score_one
 from ml.src.sen12ms import create_sen12ms_manifest
 from scripts.inspect_png_pair import _stats
+from scripts.prepare_png_split_manifest import pair_row
 
 
 def test_training_and_inference_use_identical_sar_preprocessing():
@@ -60,6 +61,16 @@ def test_png_inspector_distinguishes_green_target_from_grayscale(tmp_path: Path)
     assert mode == "RGB" and size == (8, 8)
     assert means[1] > means[0] and means[1] > means[2]
     assert spread > 0.7
+
+
+def test_png_manifest_reverses_to_grayscale_B_input_and_coloured_A_target(tmp_path: Path):
+    a_path = tmp_path / "train_A" / "tile.png"
+    b_path = tmp_path / "train_B" / "tile.png"
+    row = pair_row("tile", "train", a_path, b_path, tmp_path, "B", "test source")
+    assert row["input_side"] == "B" and row["target_side"] == "A"
+    assert row["sar_vv_path"] == "train_B/tile.png"
+    assert row["sar_vh_path"] == "train_B/tile.png"
+    assert row["optical_path"] == "train_A/tile.png"
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():
@@ -195,8 +206,8 @@ def test_png_a_b_split_folders_make_manifest_and_pairs(tmp_path: Path):
         (root / f"{split}_A").mkdir(parents=True)
         (root / f"{split}_B").mkdir(parents=True)
         name = "ROIs1868_summer_s000147_p000612.png"
-        Image.fromarray(np.tile(np.arange(32, dtype=np.uint8), (24, 1))).save(root / f"{split}_A" / name)
-        Image.fromarray(np.full((24, 32, 3), [20, 120, 200], dtype=np.uint8)).save(root / f"{split}_B" / name)
+        Image.fromarray(np.full((24, 32, 3), [20, 120, 200], dtype=np.uint8)).save(root / f"{split}_A" / name)
+        Image.fromarray(np.tile(np.arange(32, dtype=np.uint8), (24, 1))).save(root / f"{split}_B" / name)
     output = tmp_path / "manifest.json"
     result = subprocess.run([
         sys.executable, "scripts/prepare_png_split_manifest.py", "--data-root", str(root),
@@ -207,6 +218,9 @@ def test_png_a_b_split_folders_make_manifest_and_pairs(tmp_path: Path):
     train = next(row for row in rows if row["split"] == "train")
     sar = normalise_sar_pair(train, size=16)
     target = optical_target(train, size=16)
+    assert train["input_side"] == "B" and train["target_side"] == "A"
+    assert Path(train["sar_vv_path"]).parent.name == "train_B"
+    assert Path(train["optical_path"]).parent.name == "train_A"
     assert sar.shape == (16, 16, 2) and np.array_equal(sar[..., 0], sar[..., 1])
     assert target.shape == (16, 16, 3) and target[8, 8, 1] == pytest.approx(120 / 255, abs=1e-5)
 

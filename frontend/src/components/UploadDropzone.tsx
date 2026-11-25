@@ -20,7 +20,7 @@ export function UploadDropzone({ file, onFile, onError, disabled, pngPrototype =
     if (!okType) {
       onFile(null)
       onError(pngPrototype
-        ? 'This prototype checkpoint expects a grayscale A-side PNG tile.'
+        ? 'This prototype checkpoint expects a grayscale PNG tile.'
         : 'Unsupported file type. Use a 2-band GeoTIFF (VV band 1, VH band 2), PNG or JPEG preview.')
       return
     }
@@ -42,7 +42,7 @@ export function UploadDropzone({ file, onFile, onError, disabled, pngPrototype =
         </div>
       </div>
       <p className="panel-sub">{pngPrototype
-        ? 'Upload one grayscale A-side PNG tile from the paired dataset (256×256). This checkpoint was trained on grayscale input duplicated into two channels; it is not a separate VV/VH model.'
+        ? 'Upload one 256×256 grayscale PNG tile from the paired dataset. It is duplicated into two model channels; it is not a separate VV/VH model.'
         : 'Two-band Sentinel-1 GeoTIFF (VV band 1, VH band 2), or PNG/JPEG preview, up to 50 MB (GeoTIFF) / 10 MB (preview). Preview images are duplicated across channels and are not true dual-pol input.'}</p>
       <div
         className={`dropzone ${dragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}

@@ -1,57 +1,59 @@
-# Evaluation report
+# Evaluation and direction audit
 
-## Current status: limited prototype evaluation completed
+## Current status
 
-The team trained a **grayscale A-side PNG → RGB B-side PNG** prototype locally. This is not a verified Sentinel-1 VV/VH model. The test subset is small and the supplied folder split's geographic independence was not independently checked. Results measure similarity to paired PNG targets only—not true-colour recovery, map accuracy, or usefulness for emergency decisions.
+The latest audit found that the original manifest had the image direction reversed for the intended grayscale-to-colour demo:
 
-### Run details reported by the team
+| Folder | Sample | Images with RGB spread > 0.02 | Mean RGB spread |
+|---|---:|---:|---:|
+| train_A | 100 | 99 | 0.14233 |
+| train_B | 100 | 0 | 0.00000 |
+| val_A | 100 | 97 | 0.12458 |
+| val_B | 100 | 0 | 0.00000 |
+| test_A | 100 | 99 | 0.11702 |
+| test_B | 100 | 0 | 0.00000 |
+- The previous manifest fed A (which training converted to grayscale) and used B as target. The B targets had `mean_rgb_channel_spread = 0.00000`.
+- The previous checkpoint therefore learned **grayscale A → grayscale B**, not grayscale SAR-like input → colour image.
 
-- Training: CPU, 1,000 training tiles, 200 validation tiles, 5 epochs.
-- Best validation loss: 0.27527 at epoch 5.
-- Evaluation: 200 of 4,576 test tiles, seed 42; 200 scene groups.
-- The original 34 GB image archive and tile manifest are not included in this repository.
+The 200-tile numbers below are retained as a **historical pipeline check only**. They are not a valid colourization benchmark and must not be presented as proof that Vyora predicts colour. A corrected manifest now defaults to grayscale B input → colour-bearing A target, subject to verifying the dataset semantics. The old checkpoint is incompatible and must not be fine-tuned for the corrected direction.
 
-### Held-out subset comparison
+## Historical metrics: old A→B direction
 
-| Method | MAE ↓ | PSNR (dB) ↑ | SSIM ↑ | Edge preservation ↑ | Mean RGB spread (prediction) | Mean RGB spread (target) | Median CPU latency |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Pseudocolour baseline | 0.22571 | 11.55409 | 0.24056 | 0.21084 | 0.41310 | 0.00000 | — |
-| ResU-Net prototype | 0.15514 | 15.72773 | 0.44559 | 0.45740 | 0.00471 | 0.00000 | 73.87 ms* |
+Reported run: CPU, 1,000 train tiles, 200 validation tiles, 5 epochs; evaluation on 200 of 4,576 test tiles, seed 42. Folder-split geographic independence was not independently verified.
 
-Lower MAE and higher PSNR/SSIM/edge score indicate closer pixel/structure similarity to these paired targets. They do **not** establish geographic correctness. `*` Latency is a reported CPU evaluation measurement; live request time varies by machine and includes other processing.
+| Method | MAE ↓ | PSNR (dB) ↑ | SSIM ↑ | Edge preservation ↑ | Mean RGB spread (prediction) | Mean RGB spread (target) |
+|---|---:|---:|---:|---:|---:|---:|
+| Pseudocolour baseline | 0.22571 | 11.55409 | 0.24056 | 0.21084 | 0.41310 | 0.00000 |
+| ResU-Net checkpoint | 0.15514 | 15.72773 | 0.44559 | 0.45740 | 0.00471 | 0.00000 |
 
-## Why the app output looks grey: important audit finding
+The target spread of zero means the targets loaded by that run were effectively grayscale. Similarity metrics against those targets do not establish colour recovery, geographic correctness, or operational utility. The reported CPU median latency was 86.07 ms for the latest audit run; live request time varies by machine and includes other processing.
 
-The latest colour audit found a **mean RGB channel spread of 0.00471 in the model output but 0.00000 in the paired targets loaded for these 200 test tiles**. A spread near zero means the arrays are effectively grayscale. This indicates the evaluator is currently reading grayscale B targets (or the manifest points to grayscale files), despite the team seeing green images elsewhere in the archive.
+## Correct workflow before retraining
 
-The first fix is therefore **verify the exact A/B paths in the manifest against one of the green B files**. Run `python scripts/inspect_png_pair.py --manifest data/manifests/tiles.json --tile-id test-ROIs1868_summer_s000131_p000746`; it prints the A/B filenames and RGB channel statistics without exposing absolute local paths. More epochs cannot teach colour if the target arrays being loaded have no colour variation. If the intended B image has colour but the manifest points elsewhere, correct/regenerate the manifest first. Keep the test set untouched when selecting the model. The limited 1,000-tile, 5-epoch run may also underfit, but it is not the only issue indicated by this report.
+1. Regenerate the manifest with `--input-side B` (the default), so grayscale B is the model input and A is the target.
+2. Check a matched pair with `scripts/inspect_png_pair.py`; verify the target has non-zero RGB spread and visually matches the intended colour image.
+3. Train from scratch to a **new checkpoint path**. Do not resume the old A→B checkpoint; the input-side marker intentionally makes the trainer reject it.
+4. Select checkpoints only using validation loss. Then evaluate once on the held-out test subset and inspect paired target/prediction/error panels.
 
-## Colour-collapse diagnostic
+Example Windows commands:
 
-New evaluation runs also report `mean_rgb_channel_spread` for model output and reference. It is the average per-pixel difference between the largest and smallest RGB channel: near zero means the image is close to grey; a larger reference value with a much smaller prediction value is evidence of colour collapse. This is a diagnostic, not a quality score by itself.
-
-## Interpretation of live UI values
-
-- **Observed runtime:** time for that request on the current machine.
-- **Structure proxy:** correlation of image gradients between input and output. It is not accuracy or a comparison with the paired B target.
-- **Mean consistency:** agreement between original and flipped model predictions. It is not calibrated uncertainty or truth.
-- **Held-out evaluation:** the table above; it is a small, locally run subset, not full-dataset validation.
-
-## Reproduce / extend evaluation
-
-```bash
-python -m ml.src.evaluate \
-  --manifest data/manifests/tiles.json \
-  --checkpoint backend/checkpoints/vyora_resunet.pt \
-  --max-test-tiles 200 --seed 42 \
-  --output docs/evaluation_results.json \
-  --examples-dir docs/evaluation_examples
+```powershell
+python scripts/prepare_png_split_manifest.py --data-root "$env:OneDrive\Desktop\imagery data\archive\sen12ms_SUMMER" --input-side B --licence-note "Record the actual source and terms"
+python -m ml.src.train --config ml/configs/train_default.json --epochs 5 --max-train-tiles 1000 --max-validation-tiles 200 --output-checkpoint backend/checkpoints/vyora_resunet_b_to_a.pt
+python -m ml.src.evaluate --manifest data/manifests/tiles.json --checkpoint backend/checkpoints/vyora_resunet_b_to_a.pt --max-test-tiles 200 --seed 42 --output docs/evaluation_results_b_to_a.json --examples-dir docs/evaluation_examples_b_to_a
 ```
 
-The evaluator compares the model and a simple intensity-to-palette baseline and saves input/reference/prediction/error panels for the highest-MAE test cases. Keep the test split untouched while choosing training settings. The original manifest and generated report/panels stay local unless the team intentionally reviews and publishes them; do not publish absolute local paths or the 34 GB archive.
+The 1,000-tile, 5-epoch CPU run previously took over 30 minutes. It may still underfit; more data/epochs can take substantially longer and are not guaranteed to improve visual quality. Do not overwrite or promote the current checkpoint until the corrected run is verified.
 
-## Reporting language
+## Colour diagnostic
 
-Say: “On a 200-tile subset of our supplied test split, the prototype was more similar to paired PNG targets than a simple pseudocolour baseline.”
+`mean_rgb_channel_spread` is the average per-pixel difference between the largest and smallest RGB channel: near zero means nearly grayscale; a larger value means more channel separation. Compare prediction with target. It is a colour-collapse diagnostic, not a quality score by itself.
 
-Do not say: “restores real satellite colours,” “verified VV/VH,” “geographically accurate,” “detects floods,” or “99% accurate.”
+## Live UI values are not accuracy
+
+- **Observed runtime:** time for the current request on this machine.
+- **Structure proxy:** correlation of image gradients between input and output; not accuracy or comparison with the paired target.
+- **Mean consistency:** agreement between original and flipped model predictions; not calibrated uncertainty or truth.
+- **No classification:** the model does not identify water, floods, vegetation, buildings, or land-cover percentages.
+
+Until a corrected B→A evaluation is run, report the metrics above only as an audit of the old direction—not as colorization performance.
