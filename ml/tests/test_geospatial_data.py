@@ -15,6 +15,7 @@ from backend.app.core.geospatial import preprocess_pair
 from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_sar_pair, optical_target
 from ml.src.evaluate import _mean_scores, _panel, score_one
 from ml.src.sen12ms import create_sen12ms_manifest
+from scripts.inspect_png_pair import _stats
 
 
 def test_training_and_inference_use_identical_sar_preprocessing():
@@ -48,6 +49,17 @@ def test_evaluation_reports_colour_collapse_against_rgb_reference():
     scores = score_one(grey_prediction, target)
     assert scores["mean_rgb_channel_spread"] == 0
     assert scores["target_rgb_channel_spread"] > 0.7
+
+
+def test_png_inspector_distinguishes_green_target_from_grayscale(tmp_path: Path):
+    path = tmp_path / "green.png"
+    green = np.zeros((8, 8, 3), dtype=np.uint8)
+    green[..., 1] = 200
+    Image.fromarray(green, mode="RGB").save(path)
+    mode, size, means, spread = _stats(path)
+    assert mode == "RGB" and size == (8, 8)
+    assert means[1] > means[0] and means[1] > means[2]
+    assert spread > 0.7
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():

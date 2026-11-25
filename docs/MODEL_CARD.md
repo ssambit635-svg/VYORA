@@ -16,7 +16,7 @@
 | Geospatial metadata | None in PNG input; output is not georeferenced |
 | Class prediction | None; no water/flood/vegetation/building classifier |
 
-The green/colourful B-side files are paired reference targets used during training/evaluation. In normal app use, the model receives A only and estimates B-like pixels. The current short training run can produce muted or grey results even when B references are colourful.
+The B-side files are paired reference targets used during training/evaluation. In normal app use, the model receives A only and estimates B-like pixels. The latest 200-tile colour audit measured target RGB spread as 0.00000 and model output spread as 0.00471, which means the evaluator's loaded B targets are effectively grayscale. If the archive also contains green B images, first verify that the manifest points to those exact files; more training cannot restore colour from a grayscale target mapping.
 
 ## Intended use
 

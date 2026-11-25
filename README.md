@@ -94,7 +94,13 @@ python -m ml.src.evaluate --manifest data/manifests/tiles.json \
   --checkpoint backend/checkpoints/vyora_resunet.pt --max-test-tiles 200
 ```
 
-The manifest step checks that A/B filenames pair in each split. The green/colourful B-side images are training targets; the app receives A and must learn to predict B. The current checkpoint was trained on only 1,000 tiles for 5 epochs, so colour can be muted or grey. The script supports safe fine-tuning without overwriting the original checkpoint:
+The manifest step checks that A/B filenames pair in each split. B-side images are the training targets; the app receives A and must learn to predict B. The latest colour audit found that the 200 test B targets loaded from the manifest are grayscale (`target_rgb_channel_spread: 0.00000`), even though the team sees green images elsewhere in the archive. **Verify a B path before any more training**; extra epochs cannot learn colour from grayscale targets. Inspect one pair without printing private absolute paths:
+
+```powershell
+python scripts/inspect_png_pair.py --manifest data/manifests/tiles.json --tile-id test-ROIs1868_summer_s000131_p000746
+```
+
+If the expected green B file has non-zero spread but this command reports zero, correct/regenerate the manifest before fine-tuning. The script supports safe fine-tuning without overwriting the original checkpoint:
 
 ```powershell
 python -m ml.src.train --config ml/configs/train_default.json --resume-checkpoint backend/checkpoints/vyora_resunet.pt --epochs 5 --max-train-tiles 1000 --max-validation-tiles 200

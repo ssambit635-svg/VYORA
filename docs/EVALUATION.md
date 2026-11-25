@@ -13,18 +13,18 @@ The team trained a **grayscale A-side PNG → RGB B-side PNG** prototype locally
 
 ### Held-out subset comparison
 
-| Method | MAE ↓ | PSNR (dB) ↑ | SSIM ↑ | Edge preservation ↑ | Median CPU latency |
-|---|---:|---:|---:|---:|---:|
-| Pseudocolour baseline | 0.22571 | 11.55409 | 0.24056 | 0.21084 | — |
-| ResU-Net prototype | 0.15514 | 15.72773 | 0.44559 | 0.45740 | 73.87 ms* |
+| Method | MAE ↓ | PSNR (dB) ↑ | SSIM ↑ | Edge preservation ↑ | Mean RGB spread (prediction) | Mean RGB spread (target) | Median CPU latency |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Pseudocolour baseline | 0.22571 | 11.55409 | 0.24056 | 0.21084 | 0.41310 | 0.00000 | — |
+| ResU-Net prototype | 0.15514 | 15.72773 | 0.44559 | 0.45740 | 0.00471 | 0.00000 | 73.87 ms* |
 
 Lower MAE and higher PSNR/SSIM/edge score indicate closer pixel/structure similarity to these paired targets. They do **not** establish geographic correctness. `*` Latency is a reported CPU evaluation measurement; live request time varies by machine and includes other processing.
 
-## Why the app output may look grey
+## Why the app output looks grey: important audit finding
 
-The archive's green/colourful `B` images are the **training targets/reference images**. The app accepts an `A` grayscale tile and asks the model to predict a B-like RGB image; it does not display the matching B target during ordinary inference. This checkpoint saw only 1,000 training tiles for 5 epochs. A small model trained on that limited subset can average uncertain colours and produce a muted or grey-looking estimate. The existence of colourful B images does not mean the model has learned to reproduce their colours well.
+The latest colour audit found a **mean RGB channel spread of 0.00471 in the model output but 0.00000 in the paired targets loaded for these 200 test tiles**. A spread near zero means the arrays are effectively grayscale. This indicates the evaluator is currently reading grayscale B targets (or the manifest points to grayscale files), despite the team seeing green images elsewhere in the archive.
 
-To improve this, first compare predictions with the paired B targets on held-out tiles, inspect the saved evaluation panels, then fine-tune only if validation improves. Never choose an epoch based on the test set.
+The first fix is therefore **verify the exact A/B paths in the manifest against one of the green B files**. Run `python scripts/inspect_png_pair.py --manifest data/manifests/tiles.json --tile-id test-ROIs1868_summer_s000131_p000746`; it prints the A/B filenames and RGB channel statistics without exposing absolute local paths. More epochs cannot teach colour if the target arrays being loaded have no colour variation. If the intended B image has colour but the manifest points elsewhere, correct/regenerate the manifest first. Keep the test set untouched when selecting the model. The limited 1,000-tile, 5-epoch run may also underfit, but it is not the only issue indicated by this report.
 
 ## Colour-collapse diagnostic
 
