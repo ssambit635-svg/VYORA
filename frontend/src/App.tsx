@@ -19,6 +19,7 @@ export default function App() {
   const [error, setError] = useState('')
   const resultsRef = useRef<HTMLDivElement>(null)
   const pngPrototype = health?.model_version.includes('paired-png-prototype') ?? false
+  const legacyPngDirection = health?.model_version.includes('paired-png-prototype-v0.1') ?? false
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setError('Cannot reach the local API. Start the backend before running a scene.'))
@@ -57,9 +58,11 @@ export default function App() {
             <div className="hero-copy">
               <span className="hero-eyebrow"><Radio size={14} /> HK26-PS-19 · SAR IMAGE COLORIZATION</span>
               <h1>See the shape of<br /><span>what radar sees.</span></h1>
-              <p>{pngPrototype
-                ? 'This prototype learns from paired A/B PNG tiles. It accepts a grayscale tile and estimates pixels from its paired side; the input is not separate VV/VH channels.'
-                : 'Vyora maps paired VV/VH backscatter to an estimated optical-style view, while keeping the measured radar evidence visible.'}</p>
+              <p>{legacyPngDirection
+                ? 'The loaded v0.1 checkpoint used a reversed A/B pairing and is not a valid colourization result. The corrected B-to-A experiment needs a new checkpoint.'
+                : pngPrototype
+                  ? 'This prototype learns from paired A/B PNG tiles. It accepts a grayscale tile and estimates pixels from its paired side; the input is not separate VV/VH channels.'
+                  : 'Vyora maps paired VV/VH backscatter to an estimated optical-style view, while keeping the measured radar evidence visible.'}</p>
               <div className="hero-actions">
                 <a className="primary-btn" href="#workspace">Try a demo scene <ArrowDown size={16} /></a>
                 <a className="text-btn" href="#method">How the model works</a>
@@ -86,9 +89,11 @@ export default function App() {
           <div className="section-title compact">
             <span className="eyebrow">INTERPRETATION WORKSPACE</span>
             <h2>Choose a scene, then look closer.</h2>
-            <p>{pngPrototype
-              ? 'Use the grayscale PNG side from the paired dataset. The bundled demo scenes are synthetic and are not training examples.'
-              : 'Four synthetic preview scenes keep the demo reliable. For geospatial inference, upload a calibrated, co-registered two-band GeoTIFF with VV first and VH second.'}</p>
+            <p>{legacyPngDirection
+              ? 'This checkpoint is legacy and should not be used to claim colourization. Rebuild the manifest with grayscale B input and colour-bearing A target, then train a new checkpoint.'
+              : pngPrototype
+                ? 'Use the grayscale PNG side from the paired dataset. The bundled demo scenes are synthetic and are not training examples.'
+                : 'Four synthetic preview scenes keep the demo reliable. For geospatial inference, upload a calibrated, co-registered two-band GeoTIFF with VV first and VH second.'}</p>
           </div>
 
           <div className="workspace-grid">

@@ -15,6 +15,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
   const conf = result.confidence_summary
   const isDev = result.mode === 'development'
   const isPngPrototype = result.model_version.includes('paired-png-prototype')
+  const isLegacyPngDirection = result.model_version.includes('paired-png-prototype-v0.1')
 
   return (
     <section className="results-section" aria-labelledby="results-title">
@@ -27,15 +28,17 @@ export function ResultWorkspace({ result, onReset }: Props) {
         <button className="ghost-btn" onClick={onReset}><RotateCcw size={15} /> New scene</button>
       </div>
 
-      <div className={`mode-banner ${isDev ? 'dev' : 'model'}`} role="note">
-        {isDev ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
+      <div className={`mode-banner ${isDev || isLegacyPngDirection ? 'dev' : 'model'}`} role="note">
+        {isDev || isLegacyPngDirection ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
         <div>
-          <strong>{isDev ? 'DEVELOPMENT MODE — not AI inference' : 'MODEL CHECKPOINT — AI inference'}</strong>
+          <strong>{isDev ? 'DEVELOPMENT MODE — not AI inference' : isLegacyPngDirection ? 'LEGACY CHECKPOINT — wrong training direction' : 'MODEL CHECKPOINT — AI inference'}</strong>
           <span>{isDev
             ? 'Output comes from fixed, hand-authored backscatter rules used to demonstrate the product flow. No trained model is running and no accuracy claim is made.'
-            : isPngPrototype
-              ? `Output comes from the local ${result.model_version} checkpoint trained on paired PNG tiles with grayscale input duplicated into two model channels. This is not separate VV/VH input.`
-              : `Output was produced by the local ${result.model_version} checkpoint. The consistency cue comes from flipped-view agreement; it is not calibrated uncertainty.`}
+            : isLegacyPngDirection
+              ? 'This v0.1 checkpoint used A as input and B as target. The folder audit found B targets grayscale, so this is not a valid colourization result. Do not report it as colour recovery; use a newly trained B-to-A checkpoint.'
+              : isPngPrototype
+                ? `Output comes from the local ${result.model_version} checkpoint trained on paired PNG tiles with grayscale input duplicated into two model channels. This is not separate VV/VH input.`
+                : `Output was produced by the local ${result.model_version} checkpoint. The consistency cue comes from flipped-view agreement; it is not calibrated uncertainty.`}
           </span>
         </div>
       </div>

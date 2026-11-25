@@ -110,7 +110,7 @@ def _panel(sar: np.ndarray, target: np.ndarray, pred: np.ndarray) -> Image.Image
     radar = np.stack((sar[..., 0], sar[..., 1], (sar[..., 0] + sar[..., 1]) / 2), axis=-1)
     error = np.clip(np.abs(pred - target) * 4, 0, 1)
     arrays = [radar, target, pred, error]
-    titles = ["VV/VH diagnostic", "S2 RGB target", "Model estimate", "Absolute error x4"]
+    titles = ["Input preview", "Paired target", "Model estimate", "Absolute error x4"]
     size = target.shape[0]
     panel = Image.new("RGB", (size * len(arrays), size + 26), "white")
     draw = ImageDraw.Draw(panel)
