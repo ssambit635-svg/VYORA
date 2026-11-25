@@ -46,6 +46,8 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=None, help="Override configured epoch count for a short prototype run")
     parser.add_argument("--max-train-tiles", type=int, default=None, help="Use a deterministic subset to shorten a prototype run")
     parser.add_argument("--max-validation-tiles", type=int, default=None)
+    parser.add_argument("--resume-checkpoint", default=None, help="Continue from saved model weights; optimizer state is restarted")
+    parser.add_argument("--output-checkpoint", default=None, help="Checkpoint destination; resume defaults to a new *_finetuned.pt file")
     args = parser.parse_args()
     config_path = _resolve(args.config)
     if not config_path.is_file():
@@ -127,9 +129,38 @@ def main() -> None:
             tile_id = groups[split][0].get("tile_id", "unknown tile")
             parser.exit(2, f"Data preflight failed for {split} tile {tile_id}: {exc}\nCheck band indexes, scaling and TIFF readability.\n")
 
+    png_prototype = any("A/B PNG export" in row.get("source", "") for row in rows)
+    expected_representation = "grayscale_A_PNG_duplicated" if png_prototype else "VV_VH_pair"
+    resume_path = _resolve(args.resume_checkpoint) if args.resume_checkpoint else None
+    saved_checkpoint = None
+    model_base_channels = int(config.get("base_channels", 24))
+    if resume_path:
+        if not resume_path.is_file():
+            parser.error(f"Resume checkpoint not found: {resume_path}")
+        try:
+            try:
+                saved_checkpoint = torch.load(resume_path, map_location="cpu", weights_only=True)
+            except TypeError:
+                saved_checkpoint = torch.load(resume_path, map_location="cpu")
+            if not isinstance(saved_checkpoint, dict) or "state_dict" not in saved_checkpoint:
+                raise ValueError("checkpoint has no state_dict")
+            saved_representation = str(saved_checkpoint.get("input_representation", "VV_VH_pair"))
+            if saved_representation != expected_representation:
+                raise ValueError(f"checkpoint input is {saved_representation}, but this manifest expects {expected_representation}")
+            if int(saved_checkpoint.get("input_channels", 2)) != 2:
+                raise ValueError("checkpoint does not have the required two input channels")
+            model_base_channels = int(saved_checkpoint.get("base_channels", model_base_channels))
+        except Exception as exc:
+            parser.error(f"Cannot resume from {resume_path}: {exc}")
+
     _seed_everything(seed, torch)
     device = torch.device("cuda" if torch.cuda.is_available() and config.get("use_cuda", False) else "cpu")
-    model = build_model(int(config.get("base_channels", 24)), input_channels=2).to(device)
+    model = build_model(model_base_channels, input_channels=2).to(device)
+    if saved_checkpoint is not None:
+        try:
+            model.load_state_dict(saved_checkpoint["state_dict"])
+        except Exception as exc:
+            parser.error(f"Resume checkpoint weights do not match this model: {exc}")
     print(f"Model: ResU-Net, {parameter_count(model):,} parameters, device={device}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config.get("lr", 1e-3)))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=2, factor=0.5)
@@ -145,13 +176,36 @@ def main() -> None:
             pin_memory=(device.type == "cuda"),
         )
 
-    checkpoint_path = _resolve(config.get("checkpoint", "backend/checkpoints/vyora_resunet.pt"))
+    configured_checkpoint_path = _resolve(config.get("checkpoint", "backend/checkpoints/vyora_resunet.pt"))
+    if args.output_checkpoint:
+        checkpoint_path = _resolve(args.output_checkpoint)
+    elif resume_path:
+        checkpoint_path = resume_path.with_name(f"{resume_path.stem}_finetuned{resume_path.suffix}")
+    else:
+        checkpoint_path = configured_checkpoint_path
+    if resume_path and checkpoint_path.resolve() == resume_path.resolve():
+        parser.error("Refusing to overwrite the resume checkpoint. Choose a different --output-checkpoint path.")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = _resolve(config.get("log_csv", "backend/checkpoints/training_history.csv"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     patience = int(config.get("early_stopping_patience", 6))
     best, best_epoch, stale = float("inf"), 0, 0
     history = []
+    if saved_checkpoint is not None:
+        model.eval()
+        baseline_sum, baseline_count = 0.0, 0
+        with torch.inference_mode():
+            for sar, target in loaders["validation"]:
+                sar, target = sar.to(device), target.to(device)
+                value = total_loss(model(sar), target, **weights)["total"].item()
+                baseline_sum += value * len(sar)
+                baseline_count += len(sar)
+        if baseline_count == 0:
+            parser.exit(2, "Validation loader yielded no tiles; cannot safely resume.\n")
+        best = baseline_sum / baseline_count
+        if not np.isfinite(best):
+            parser.exit(2, "Resume checkpoint has a non-finite validation loss; refusing to fine-tune.\n")
+        print(f"Resume baseline validation loss: {best:.5f}; original checkpoint will be kept safe.")
     try:
         for epoch in range(1, epochs + 1):
             model.train()
@@ -193,19 +247,22 @@ def main() -> None:
 
             if np.isfinite(val_loss) and val_loss < best:
                 best, best_epoch, stale = val_loss, epoch, 0
-                png_prototype = any("A/B PNG export" in row.get("source", "") for row in rows)
                 default_version = ("resunet-sen12ms-paired-png-prototype-v0.1" if png_prototype else "resunet-v0.1")
                 configured_version = str(config.get("version", ""))
                 if png_prototype and configured_version.startswith("resunet-vv-vh"):
                     configured_version = ""
+                version = configured_version or default_version
+                if resume_path and not version.endswith("-finetuned"):
+                    version += "-finetuned"
                 checkpoint = {
-                    "state_dict": model.state_dict(), "base_channels": int(config.get("base_channels", 24)),
+                    "state_dict": model.state_dict(), "base_channels": model_base_channels,
                     "input_channels": 2, "input_representation": "grayscale_A_PNG_duplicated" if png_prototype else "VV_VH_pair",
-                    "version": configured_version or default_version,
+                    "version": version,
                     "training_note": "A grayscale PNG duplicated into two channels; prototype only; not independently verified VV/VH." if png_prototype else "Paired VV/VH raster input",
                     "epoch": epoch, "validation_loss": float(val_loss), "seed": seed,
                     "manifest": str(manifest_path), "train_tiles": len(groups["train"]),
                     "validation_tiles": len(groups["validation"]),
+                    "fine_tuned_from": resume_path.name if resume_path else None,
                 }
                 _atomic_save(torch, checkpoint, checkpoint_path)
             else:
@@ -221,7 +278,17 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(history)
     if best_epoch == 0:
-        parser.exit(2, "No finite validation loss was produced; no checkpoint was saved.\n")
+        if resume_path:
+            # No epoch beat the existing model on this validation sample. Preserve it
+            # at the new destination so users can evaluate/promote it explicitly.
+            baseline_payload = dict(saved_checkpoint)
+            baseline_payload["validation_loss"] = float(best)
+            baseline_payload["fine_tuned_from"] = resume_path.name
+            baseline_payload["fine_tuning_note"] = "No fine-tuning epoch improved validation loss; original weights retained."
+            _atomic_save(torch, baseline_payload, checkpoint_path)
+            print("No fine-tuning epoch improved validation loss; retained original weights.")
+        else:
+            parser.exit(2, "No finite validation loss was produced; no checkpoint was saved.\n")
     print(f"Best validation loss {best:.5f} at epoch {best_epoch}; checkpoint: {checkpoint_path}")
     print(f"Training history: {log_path}")
     print("Training complete is not a performance claim; run held-out evaluation before reporting results.")

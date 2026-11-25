@@ -33,10 +33,21 @@ def test_evaluation_metrics_and_failure_panel_are_well_formed():
     target = np.zeros((16, 16, 3), dtype=np.float32)
     scores = score_one(target, target)
     assert scores["MAE_L1"] == 0 and scores["PSNR_dB"] is None
+    assert scores["mean_rgb_channel_spread"] == 0
+    assert scores["target_rgb_channel_spread"] == 0
     average = _mean_scores([scores])
     assert average["PSNR_perfect_tiles"] == 1 and average["tiles"] == 1
     sar = np.zeros((16, 16, 2), dtype=np.float32)
     assert _panel(sar, target, target).size == (16 * 4, 16 + 26)
+
+
+def test_evaluation_reports_colour_collapse_against_rgb_reference():
+    target = np.zeros((16, 16, 3), dtype=np.float32)
+    target[..., 1] = 0.8  # vivid green reference image
+    grey_prediction = np.repeat(target[..., 1:2] * 0.5, 3, axis=2)
+    scores = score_one(grey_prediction, target)
+    assert scores["mean_rgb_channel_spread"] == 0
+    assert scores["target_rgb_channel_spread"] > 0.7
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():

@@ -1,56 +1,57 @@
 # Evaluation report
 
-## Status: not evaluated
+## Current status: limited prototype evaluation completed
 
-**No trained checkpoint, paired training set or held-out test set is bundled with this repository. No model accuracy, SSIM, MAE or latency benchmark is claimed.** The cells below are intentionally `TBD`; they must be filled only from a saved evaluation output produced by `python -m ml.src.evaluate`.
+The team trained a **grayscale A-side PNG → RGB B-side PNG** prototype locally. This is not a verified Sentinel-1 VV/VH model. The test subset is small and the supplied folder split's geographic independence was not independently checked. Results measure similarity to paired PNG targets only—not true-colour recovery, map accuracy, or usefulness for emergency decisions.
 
-### Dataset split
+### Run details reported by the team
 
-| Split | Scene groups | Number of tiles | Notes |
-|---|---:|---:|---|
-| Train | TBD | TBD | No test-scene overlap |
-| Validation | TBD | TBD | Used for model choices |
-| Test | TBD | TBD | Held out until final assessment |
+- Training: CPU, 1,000 training tiles, 200 validation tiles, 5 epochs.
+- Best validation loss: 0.27527 at epoch 5.
+- Evaluation: 200 of 4,576 test tiles, seed 42; 200 scene groups.
+- The original 34 GB image archive and tile manifest are not included in this repository.
 
-### Model comparison (held-out)
+### Held-out subset comparison
 
-| Method | MAE/L1 | PSNR (dB) | SSIM | Edge preservation | Median latency | Notes |
-|---|---:|---:|---:|---:|---|
-| Pseudocolour baseline | TBD | TBD | TBD | TBD | TBD | Non-ML comparison; not yet computed |
-| Vyora VV/VH ResU-Net | TBD | TBD | TBD | TBD | TBD | Not trained; no result exists |
+| Method | MAE ↓ | PSNR (dB) ↑ | SSIM ↑ | Edge preservation ↑ | Median CPU latency |
+|---|---:|---:|---:|---:|---:|
+| Pseudocolour baseline | 0.22571 | 11.55409 | 0.24056 | 0.21084 | — |
+| ResU-Net prototype | 0.15514 | 15.72773 | 0.44559 | 0.45740 | 73.87 ms* |
 
-## What the app *does* report today
+Lower MAE and higher PSNR/SSIM/edge score indicate closer pixel/structure similarity to these paired targets. They do **not** establish geographic correctness. `*` Latency is a reported CPU evaluation measurement; live request time varies by machine and includes other processing.
 
-For each live request, the backend computes and the UI displays only:
+## Why the app output may look grey
 
-- **Observed runtime** — wall-clock milliseconds measured for this request on this machine.
-- **Input→output edge agreement proxy** — Pearson correlation of log-magnitude Sobel-like gradients of the input tile and the output image. This measures structural retention between the two images; it is **not** accuracy, SSIM against an optical reference, or geographic correctness.
-- **Confidence distribution** — share of the produced confidence map in low (<0.45), medium (0.45–0.70) and high (≥0.70) bands. In development mode this is rule agreement; it is not uncertainty calibration.
-- **Held-out status** — shown as `Not run` until a real evaluation exists.
+The archive's green/colourful `B` images are the **training targets/reference images**. The app accepts an `A` grayscale tile and asks the model to predict a B-like RGB image; it does not display the matching B target during ordinary inference. This checkpoint saw only 1,000 training tiles for 5 epochs. A small model trained on that limited subset can average uncertain colours and produce a muted or grey-looking estimate. The existence of colourful B images does not mean the model has learned to reproduce their colours well.
 
-These values are computed from the actual arrays returned by that request. No number is hard-coded in the UI.
+To improve this, first compare predictions with the paired B targets on held-out tiles, inspect the saved evaluation panels, then fine-tune only if validation improves. Never choose an epoch based on the test set.
 
-## How to produce a real report
+## Colour-collapse diagnostic
+
+New evaluation runs also report `mean_rgb_channel_spread` for model output and reference. It is the average per-pixel difference between the largest and smallest RGB channel: near zero means the image is close to grey; a larger reference value with a much smaller prediction value is evidence of colour collapse. This is a diagnostic, not a quality score by itself.
+
+## Interpretation of live UI values
+
+- **Observed runtime:** time for that request on the current machine.
+- **Structure proxy:** correlation of image gradients between input and output. It is not accuracy or a comparison with the paired B target.
+- **Mean consistency:** agreement between original and flipped model predictions. It is not calibrated uncertainty or truth.
+- **Held-out evaluation:** the table above; it is a small, locally run subset, not full-dataset validation.
+
+## Reproduce / extend evaluation
 
 ```bash
-# requires a validated manifest with a 'test' split and a trained checkpoint
 python -m ml.src.evaluate \
   --manifest data/manifests/tiles.json \
   --checkpoint backend/checkpoints/vyora_resunet.pt \
-  --output docs/evaluation_results.json
+  --max-test-tiles 200 --seed 42 \
+  --output docs/evaluation_results.json \
+  --examples-dir docs/evaluation_examples
 ```
 
-`ml/src/evaluate.py` streams the held-out tiles, computes MAE, PSNR, full-image SSIM and edge preservation for both the model and a documented intensity-to-palette baseline, records CPU inference time, and saves the worst-MAE input/reference/prediction/error panels. Report only if the manifest is genuinely scene/region-held-out and the paired data is prepared/licensed. If the manifest, checkpoint, or test data is missing/invalid, it reports the reason and writes no metrics.
+The evaluator compares the model and a simple intensity-to-palette baseline and saves input/reference/prediction/error panels for the highest-MAE test cases. Keep the test split untouched while choosing training settings. The original manifest and generated report/panels stay local unless the team intentionally reviews and publishes them; do not publish absolute local paths or the 34 GB archive.
 
-## Required evidence still to add
+## Reporting language
 
-- Run the evaluator to create worst-MAE held-out input / optical reference / model output / error panels. The evaluator now saves these automatically; no real panels exist until a real model/data evaluation is run.
-- Explain at least one failure case honestly; worst-MAE panels are automatically listed in the JSON report.
-- A confidence-map example on a real scene.
-- A latency table with the test device and repeat count.
+Say: “On a 200-tile subset of our supplied test split, the prototype was more similar to paired PNG targets than a simple pseudocolour baseline.”
 
-## Language rules
-
-Use: “on our held-out curated test set”, “estimated colour interpretation”, “the confidence layer indicates method consistency”.
-
-Never use: “real satellite colours restored”, “guaranteed flood map”, “works for all SAR imagery”, or any percentage without a documented target, split and calculation.
+Do not say: “restores real satellite colours,” “verified VV/VH,” “geographically accurate,” “detects floods,” or “99% accurate.”

@@ -2,52 +2,55 @@
 
 **HK26-PS-19 — Deep Learning-Based SAR Image Colorization & Geospatial Visual Interpretation**
 
-> **Honest status (21 Nov 2026):** no SEN12MS subset, trained checkpoint or real-data evaluation is bundled. The demo defaults to a labelled deterministic development fallback. Synthetic scenes are not satellite data. Never describe current fallback outputs as learned AI inference.
+> **Honest status (21 Nov 2026):** this repository includes a locally trained 19.2 MB grayscale-A-to-RGB-B PNG prototype checkpoint and a small held-out subset evaluation. It is not a verified VV/VH or geospatial model. The 34 GB image archive is not bundled. Read [the evaluation report](docs/EVALUATION.md) before presenting any metrics.
 
 ## Project
 
-Vyora is designed to map paired Sentinel-1 VV/VH backscatter to an **estimated optical-style RGB visual layer**, keeping the original radar view beside the estimate. The planned supervised baseline is a compact two-input ResU-Net trained against paired Sentinel-2 visible targets. It is for visual exploration, not recovered true colour, official mapping or disaster warning.
+Vyora is an early image-to-image prototype: it takes a grayscale A-side PNG tile and predicts an **estimated RGB-style B-side image**. The current checkpoint was trained with A duplicated into two input channels; it does not use separate VV/VH channels. The estimate is for visual exploration—not recovered true colour, official mapping, or disaster warning.
 
 ## Deck-aligned stack and interfaces
 
-- **Streamlit** is implemented as the presentation-aligned interface.
-- PyTorch compact ResU-Net generator, VV/VH (2 channels) → RGB-style (3 channels).
-- Rasterio/NumPy for two-band GeoTIFF input and CRS/extent-preserving 256×256 preview export.
-- Region-grouped JSON manifest and offline train/evaluation scripts.
-- The earlier **React/Vite + FastAPI** app remains available as an alternate responsive web UI and API; both use the same inference code.
-- No paid APIs/cloud services; the laptop runs locally and can be shared over the same Wi-Fi.
+- **React/Vite + FastAPI** local web app with image upload, model inference, before/after slider, consistency overlay, and PNG/JSON export.
+- PyTorch compact ResU-Net generator: current prototype uses grayscale A-side input → RGB-style estimate.
+- Offline training/evaluation scripts; the evaluation report compares against a simple baseline and saves failure-case panels.
+- Optional GeoTIFF code path exists for compatible dual-band inputs/checkpoints, but it is **not compatible with the current PNG-trained checkpoint**.
+- No paid APIs/cloud services; inference currently runs on the user's laptop, not a public hosted service.
 
-## Run the presentation version
+## Run the React + FastAPI prototype locally
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate              # Windows: .venv\\Scripts\\activate
-pip install -r requirements-ui.txt
-bash scripts/run_streamlit.sh
+Install Python dependencies once from the repository root:
+
+```powershell
+python -m pip install -r backend/requirements.txt
 ```
 
-Open `http://localhost:8501` on the laptop or `http://<laptop-LAN-IP>:8501` on a phone on the same Wi-Fi. For a trained checkpoint, install CPU/GPU PyTorch separately using the official wheel instructions and place the checkpoint at `backend/checkpoints/vyora_resunet.pt` (ignored by Git).
+In one PowerShell window, start the API:
 
-## Alternate React + FastAPI version
-
-```bash
-pip install -r backend/requirements.txt
-cd frontend && npm install && npm run build && cd ..
-bash scripts/run_local.sh
+```powershell
+python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8000` (API docs: `/docs`). The app launcher prints its LAN address.
+In a second window, install frontend packages once and start Vite:
+
+```powershell
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0
+```
+
+Open the local URL Vite prints (usually `http://localhost:5173`). The API docs are at `http://localhost:8000/docs`. Keep both windows running. The checkpoint is tracked in Git at `backend/checkpoints/vyora_resunet.pt`; the raw image archive is not.
+
 
 ## Input contract and safe interpretation
 
-- Preferred input is a **prepared two-band GeoTIFF**: VV is band 1 and VH is band 2. It must already be radiometrically calibrated, terrain-corrected, and co-registered. Current code does robust per-band 2nd–98th percentile normalization, not physical Sentinel-1 calibration.
-- PNG/JPEG and gallery scenes exist only for interface testing; grayscale previews are duplicated into the two channels and clearly marked as not genuine dual-pol data.
-- The GeoTIFF download is a model-size preview (256×256) retaining source CRS and extent—not a full-resolution or calibrated analytical raster.
-- The current flip-view cue is method consistency, not calibrated uncertainty. Feature-share cards are a fixed palette lookup, not learned land-cover segmentation.
+- **Current checkpoint input:** a 256×256 grayscale A-side PNG. The value is duplicated into two model channels; this is not genuine VV/VH.
+- A separate GeoTIFF pathway exists in code, but it is not compatible with this PNG-trained checkpoint. It requires a compatible dual-band checkpoint and already calibrated/co-registered input.
+- A PNG has no map CRS/transform, so its result cannot be a georeferenced map. The optional GeoTIFF export is a model-size preview, not a full-resolution analytical raster.
+- The flip-view cue is method consistency, not calibrated uncertainty. Palette shares are not learned land-cover labels.
 
 ## Data and model status
 
-The deck proposes SEN12MS paired Sentinel-1/Sentinel-2 imagery. The data is **not downloaded or bundled**. Download it from the [official dataset page](https://mediatum.ub.tum.de/1474000) and keep the Toolbox clone's `splits/` lists available.
+The prototype was trained locally from the team's paired A/B PNG export. The raw archive is **not downloaded into or bundled with this repository**. The current model is a PNG prototype, not a verified Sentinel-1/Sentinel-2 GeoTIFF training product. For a separate GeoTIFF experiment, use the [official dataset page](https://mediatum.ub.tum.de/1474000) and keep the Toolbox clone's `splits/` lists available.
 
 First inspect a real matched pair (this prints band descriptions/tags, raw-value percentiles, CRS and transforms):
 
@@ -75,7 +78,7 @@ python -m ml.src.evaluate --manifest data/manifests/tiles.json \
   --checkpoint backend/checkpoints/vyora_resunet.pt --output docs/evaluation_results.json
 ```
 
-See [ML status](docs/ML_STATUS.md), [Data card](docs/DATA_CARD.md), [Model card](docs/MODEL_CARD.md), and [Evaluation](docs/EVALUATION.md). Held-out results are currently **not run**; temporary smoke data is not evidence and no smoke metrics are claimed.
+See [ML status](docs/ML_STATUS.md), [Data card](docs/DATA_CARD.md), [Model card](docs/MODEL_CARD.md), and [Evaluation](docs/EVALUATION.md). The report contains the team's limited 200-tile test-subset results and their caveats.
 
 ## Quick prototype for the downloaded A/B PNG folders
 
@@ -91,7 +94,19 @@ python -m ml.src.evaluate --manifest data/manifests/tiles.json \
   --checkpoint backend/checkpoints/vyora_resunet.pt --max-test-tiles 200
 ```
 
-The manifest step checks that A/B filenames pair in each split. This PNG prototype treats grayscale A as one input duplicated into two network channels and B as RGB; it is **not a verified two-polarization VV/VH training run**. Since PNGs do not retain map coordinates, use A-side PNGs for this prototype and do not expect a georeferenced export. The training script needs PyTorch installed. The local checkpoint is ignored by Git; do not push the 34 GB dataset.
+The manifest step checks that A/B filenames pair in each split. The green/colourful B-side images are training targets; the app receives A and must learn to predict B. The current checkpoint was trained on only 1,000 tiles for 5 epochs, so colour can be muted or grey. The script supports safe fine-tuning without overwriting the original checkpoint:
+
+```powershell
+python -m ml.src.train --config ml/configs/train_default.json --resume-checkpoint backend/checkpoints/vyora_resunet.pt --epochs 5 --max-train-tiles 1000 --max-validation-tiles 200
+```
+
+It writes `backend/checkpoints/vyora_resunet_finetuned.pt` by default and retains the best validation weights; the original stays untouched. Then compare it on the held-out test subset with a separate report and example folder before using it:
+
+```powershell
+python -m ml.src.evaluate --manifest data/manifests/tiles.json --checkpoint backend/checkpoints/vyora_resunet_finetuned.pt --max-test-tiles 200 --seed 42 --output docs/evaluation_results_finetuned.json --examples-dir docs/evaluation_examples_finetuned
+```
+
+Do not promote a checkpoint unless validation and held-out comparisons support it. PNGs have no map coordinates, and the 34 GB source archive should stay out of Git.
 
 ## Documentation
 
