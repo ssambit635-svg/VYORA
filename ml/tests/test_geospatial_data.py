@@ -14,9 +14,17 @@ from rasterio.transform import from_origin
 from backend.app.core.geospatial import preprocess_pair
 from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_sar_pair, optical_target
 from ml.src.evaluate import _mean_scores, _panel, score_one
+from ml.src.train import manifest_uses_geotiff
 from ml.src.sen12ms import create_sen12ms_manifest
 from scripts.inspect_png_pair import _stats
 from scripts.prepare_png_split_manifest import pair_row
+
+
+def test_png_training_does_not_require_rasterio_but_geotiff_training_does():
+    png_rows = [{"sar_vv_path": "train_B/tile.png", "sar_vh_path": "train_B/tile.png", "optical_path": "train_A/tile.png"}]
+    tif_rows = [{"sar_path": "scene.tif", "optical_path": "target.tiff"}]
+    assert not manifest_uses_geotiff(png_rows)
+    assert manifest_uses_geotiff(tif_rows)
 
 
 def test_training_and_inference_use_identical_sar_preprocessing():

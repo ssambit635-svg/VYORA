@@ -19,6 +19,16 @@ def _resolve(path: str | Path) -> Path:
     return path if path.is_absolute() else ROOT / path
 
 
+def manifest_uses_geotiff(rows: list[dict]) -> bool:
+    path_keys = ("sar_vv_path", "sar_vh_path", "sar_path", "optical_path")
+    return any(
+        Path(row[key]).suffix.lower() in {".tif", ".tiff"}
+        for row in rows
+        for key in path_keys
+        if row.get(key)
+    )
+
+
 def _seed_everything(seed: int, torch) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -105,9 +115,10 @@ def main() -> None:
         parser.error("--epochs must be positive")
 
     try:
-        import importlib.util
-        if importlib.util.find_spec("rasterio") is None:
-            parser.exit(2, "Rasterio is required to read the GeoTIFF training data. Install backend/requirements.txt.\n")
+        if manifest_uses_geotiff(rows):
+            import importlib.util
+            if importlib.util.find_spec("rasterio") is None:
+                parser.exit(2, "Rasterio is required for GeoTIFF training data. Install backend/requirements.txt.\n")
         PairedTileDataset = get_dataset_class()
     except Exception as exc:
         parser.exit(2, f"Could not initialize the tile reader: {exc}\n")
