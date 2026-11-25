@@ -212,6 +212,11 @@ img { display: block; max-width: 100%; }
 .swatch.mid { background: var(--amber); }
 .swatch.high { background: var(--teal); }
 
+/* Prototype scope notice */
+.prototype-note { margin-top: 16px; border-color: rgba(242, 180, 92, 0.28); }
+.prototype-note h3 { margin: 0 0 6px; font-size: 14px; color: var(--amber); }
+.prototype-note p { margin: 0; color: var(--muted); font-size: 12px; }
+
 /* Feature cards */
 .feature-section { display: flex; flex-direction: column; gap: 12px; }
 .subsection-head h3 { font-size: 16px; margin: 0; }

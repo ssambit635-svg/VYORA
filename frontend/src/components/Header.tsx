@@ -20,7 +20,9 @@ export function Header({ health }: { health: Health | null }) {
         <div className="header-side">
           <span className={`mode-pill ${isModel ? 'model' : 'dev'}`} title={health?.runner_note}>
             <Activity size={13} strokeWidth={2.2} />
-            {isModel ? 'MODEL MODE' : 'DEVELOPMENT MODE'}
+            {isModel
+              ? health?.model_version.includes('paired-png-prototype') ? 'PNG PROTOTYPE' : 'MODEL MODE'
+              : 'DEVELOPMENT MODE'}
           </span>
           <button className="icon-btn menu-btn" onClick={() => setOpen(!open)} aria-label={open ? 'Close menu' : 'Open menu'}>
             {open ? <X size={20} /> : <Menu size={20} />}

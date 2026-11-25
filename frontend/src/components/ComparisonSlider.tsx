@@ -8,10 +8,13 @@ interface Props {
   showConfidence: boolean
   position: number
   onPosition: (value: number) => void
+  inputLabel?: string
+  outputLabel?: string
 }
 
 export function ComparisonSlider({
   inputUrl, colourUrl, confidenceUrl, showConfidence, position, onPosition,
+  inputLabel = 'VV/VH INPUT', outputLabel = 'INTERPRETATION',
 }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
@@ -29,7 +32,7 @@ export function ComparisonSlider({
       className="compare"
       role="slider"
       tabIndex={0}
-      aria-label="Comparison: SAR input on the left, estimated interpretation on the right"
+      aria-label={`Comparison: ${inputLabel} on the left, ${outputLabel} on the right`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(position)}
@@ -54,14 +57,14 @@ export function ComparisonSlider({
       <img
         className="compare-img"
         src={inputUrl}
-        alt="VV/VH radar diagnostic composite (synthetic grayscale for demo scenes)"
+        alt={inputLabel === 'A-SIDE PNG' ? 'Uploaded grayscale A-side PNG tile' : 'VV/VH radar diagnostic composite (synthetic grayscale for demo scenes)'}
         style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
       />
       <div className="compare-divider" style={{ left: `${position}%` }} aria-hidden="true">
         <span className="compare-handle"><MoveHorizontal size={19} /></span>
       </div>
-      <span className="compare-label left">VV/VH INPUT</span>
-      <span className="compare-label right">{showConfidence ? 'CONSISTENCY' : 'INTERPRETATION'}</span>
+      <span className="compare-label left">{inputLabel}</span>
+      <span className="compare-label right">{showConfidence ? 'CONSISTENCY' : outputLabel}</span>
     </div>
   )
 }

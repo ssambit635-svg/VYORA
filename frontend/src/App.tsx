@@ -18,6 +18,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const resultsRef = useRef<HTMLDivElement>(null)
+  const pngPrototype = health?.model_version.includes('paired-png-prototype') ?? false
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setError('Cannot reach the local API. Start the backend before running a scene.'))
@@ -56,7 +57,9 @@ export default function App() {
             <div className="hero-copy">
               <span className="hero-eyebrow"><Radio size={14} /> HK26-PS-19 · SAR IMAGE COLORIZATION</span>
               <h1>See the shape of<br /><span>what radar sees.</span></h1>
-              <p>Vyora translates paired VV/VH backscatter into an estimated optical-style view — while keeping the measured radar evidence and uncertainty visible.</p>
+              <p>{pngPrototype
+                ? 'This prototype learns from paired grayscale A-side and RGB B-side image tiles. It creates an estimated colour-style view; the input is not separate VV/VH channels.'
+                : 'Vyora maps paired VV/VH backscatter to an estimated optical-style view, while keeping the measured radar evidence visible.'}</p>
               <div className="hero-actions">
                 <a className="primary-btn" href="#workspace">Try a demo scene <ArrowDown size={16} /></a>
                 <a className="text-btn" href="#method">How the model works</a>
@@ -68,14 +71,14 @@ export default function App() {
                 <div className="orb-core"><Sparkles size={30} /></div>
               </div>
               <div className="visual-chip chip-one"><span />RAW BACKSCATTER</div>
-              <div className="visual-chip chip-two"><span />CONFIDENCE-AWARE</div>
+              <div className="visual-chip chip-two"><span />{pngPrototype ? 'PNG PROTOTYPE' : 'FLIP CONSISTENCY'}</div>
             </div>
           </div>
           <div className="container trust-row">
             <span><Wifi size={15} /> Runs locally on a laptop</span>
             <span><Cpu size={15} /> CPU-friendly compact model</span>
             <span><Sparkles size={15} /> No paid APIs or subscriptions</span>
-            <span><CircleAlert size={15} /> Estimate, not ground truth</span>
+            <span><CircleAlert size={15} /> {pngPrototype ? 'Prototype output, not ground truth' : 'Estimate, not ground truth'}</span>
           </div>
         </section>
 
@@ -83,14 +86,18 @@ export default function App() {
           <div className="section-title compact">
             <span className="eyebrow">INTERPRETATION WORKSPACE</span>
             <h2>Choose a scene, then look closer.</h2>
-            <p>Four synthetic preview scenes keep the demo reliable. For geospatial inference, upload a calibrated, co-registered two-band GeoTIFF with VV first and VH second.</p>
+            <p>{pngPrototype
+              ? 'Use one grayscale A-side PNG from the supplied dataset for this prototype. The bundled demo scenes are synthetic and are not training examples.'
+              : 'Four synthetic preview scenes keep the demo reliable. For geospatial inference, upload a calibrated, co-registered two-band GeoTIFF with VV first and VH second.'}</p>
           </div>
 
           <div className="workspace-grid">
             <div className="input-column">
-              <ScenePicker scenes={scenes} selectedId={file ? null : selectedScene} onSelect={(id) => { setFile(null); setSelectedScene(id); setError('') }} disabled={loading} />
-              <div className="or-divider"><span>OR</span></div>
-              <UploadDropzone file={file} onFile={(f) => { setFile(f); if (f) setError('') }} onError={setError} disabled={loading} />
+              {!pngPrototype && <>
+                <ScenePicker scenes={scenes} selectedId={file ? null : selectedScene} onSelect={(id) => { setFile(null); setSelectedScene(id); setError('') }} disabled={loading} />
+                <div className="or-divider"><span>OR</span></div>
+              </>}
+              <UploadDropzone file={file} onFile={(f) => { setFile(f); if (f) setError('') }} onError={setError} disabled={loading} pngPrototype={pngPrototype} />
               {error && <div className="error-box" role="alert"><CircleAlert size={17} /><span>{error}</span></div>}
               <button className="primary-btn interpret-btn" onClick={interpret} disabled={loading || (!file && !selectedScene)}>
                 {loading ? 'Interpreting…' : 'Interpret scene'} <ArrowDown size={16} />
@@ -105,15 +112,17 @@ export default function App() {
                 <div className="empty-state panel">
                   <div className="empty-visual" aria-hidden="true"><span /><span /><span /></div>
                   <h3>Your result will appear here</h3>
-                  <p>Compare the VV/VH radar composite with the estimated interpretation, inspect flip-view consistency, and export PNG, JSON or a GeoTIFF preview.</p>
-                  <div className="empty-pills"><span>Before / after slider</span><span>Confidence layer</span><span>Feature shares</span><span>Exports</span></div>
+                  <p>{pngPrototype
+                    ? 'Compare the A-side grayscale PNG with the model estimate. This prototype does not provide calibrated uncertainty, land-cover classes, or map coordinates.'
+                    : 'Compare the VV/VH radar composite with the estimated interpretation, inspect flip-view consistency, and export PNG, JSON or a GeoTIFF preview.'}</p>
+                  <div className="empty-pills"><span>Before / after slider</span><span>Consistency cue</span><span>Prototype limits</span><span>PNG + JSON export</span></div>
                 </div>
               )}
             </div>
           </div>
         </section>
 
-        <MethodSection />
+        <MethodSection pngPrototype={pngPrototype} />
       </main>
       <footer className="site-footer">
         <div className="container footer-inner">
