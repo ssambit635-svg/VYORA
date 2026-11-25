@@ -9,10 +9,15 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 import numpy as np
-from PIL import Image, ImageFilter, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from common.sar_preprocessing import normalize_sar_pair  # noqa: E402
 from .config import MAX_IMAGE_PIXELS, MAX_UPLOAD_BYTES, TILE_SIZE
 from .preprocess import ImageValidationError
 
@@ -27,17 +32,6 @@ class DecodedSAR:
     crs: str | None = None
     transform: tuple[float, ...] | None = None
     input_kind: str = "single-channel-preview"
-
-
-def _normalise_band(band: np.ndarray) -> np.ndarray:
-    band = np.asarray(band, dtype=np.float32)
-    finite = np.isfinite(band)
-    if not finite.any():
-        raise ImageValidationError("SAR band contains no finite pixels.")
-    low, high = np.percentile(band[finite], (2, 98))
-    if high <= low:
-        return np.zeros_like(band, dtype=np.float32)
-    return np.clip((np.nan_to_num(band, nan=low) - low) / (high - low), 0, 1).astype(np.float32)
 
 
 def decode_sar(payload: bytes, filename: str, content_type: str | None = None) -> DecodedSAR:
@@ -96,19 +90,11 @@ def decode_sar(payload: bytes, filename: str, content_type: str | None = None) -
 
 
 def preprocess_pair(channels: np.ndarray, size: int = TILE_SIZE, despeckle: bool = True) -> np.ndarray:
-    """Normalize two channels independently and return H x W x 2 float32 in [0,1]."""
-    if channels.ndim != 3 or channels.shape[-1] != 2:
-        raise ValueError("Expected an H x W x 2 VV/VH array.")
-    out = []
-    for channel in range(2):
-        arr = _normalise_band(channels[..., channel])
-        image = Image.fromarray(np.round(arr * 255).astype(np.uint8), mode="L")
-        if despeckle:
-            image = image.filter(ImageFilter.MedianFilter(size=3))
-        if image.size != (size, size):
-            image = image.resize((size, size), Image.Resampling.LANCZOS)
-        out.append(np.asarray(image, dtype=np.float32) / 255.0)
-    return np.stack(out, axis=-1).astype(np.float32)
+    """Shared training/inference normalization; not physical SAR calibration."""
+    try:
+        return normalize_sar_pair(channels, size=size, despeckle=despeckle)
+    except ValueError as exc:
+        raise ImageValidationError(str(exc)) from exc
 
 
 def geotiff_bytes(rgb: np.ndarray, profile: dict) -> bytes:

@@ -47,7 +47,27 @@ Open `http://localhost:8000` (API docs: `/docs`). The app launcher prints its LA
 
 ## Data and model status
 
-The deck proposes SEN12MS paired Sentinel-1/Sentinel-2 imagery. The data is **not downloaded or bundled**. Verify access/licence, calibrate and co-register VV/VH, cloud-screen visible targets, record band scale/order, and split by geographic scene group before training. Only then run:
+The deck proposes SEN12MS paired Sentinel-1/Sentinel-2 imagery. The data is **not downloaded or bundled**. Download it from the [official dataset page](https://mediatum.ub.tum.de/1474000) and keep the Toolbox clone's `splits/` lists available.
+
+First inspect a real matched pair (this prints band descriptions/tags, raw-value percentiles, CRS and transforms):
+
+```bash
+python scripts/inspect_sen12ms_pair.py --s1 /path/to/tile_s1.tif --s2 /path/to/tile_s2.tif
+```
+
+Use the source metadata to verify band indexes and optical scale, and visually check pair quality/clouds. Then generate the manifest. The example indexes/scale below are **not verified**; replace them if the inspection/source metadata says otherwise. The script requires these choices rather than silently assuming them. It pairs Toolbox list entries, reserves whole training ROIs for validation, and preserves the provided test list:
+
+```bash
+python scripts/prepare_sen12ms_manifest.py \
+  --data-root /path/to/extracted/SEN12MS \
+  --train-list /path/to/SEN12MS/splits/train_list.txt \
+  --test-list /path/to/SEN12MS/splits/test_list.txt \
+  --vv-band 1 --vh-band 2 \
+  --rgb-bands 4 3 2 --optical-scale 10000 \
+  --licence-note "<record the actual dataset terms and attribution>"
+```
+
+Classification label files are not used. Then train only after the manifest and preprocessing have been checked:
 
 ```bash
 python -m ml.src.train --config ml/configs/train_default.json
@@ -56,6 +76,22 @@ python -m ml.src.evaluate --manifest data/manifests/tiles.json \
 ```
 
 See [ML status](docs/ML_STATUS.md), [Data card](docs/DATA_CARD.md), [Model card](docs/MODEL_CARD.md), and [Evaluation](docs/EVALUATION.md). Held-out results are currently **not run**; temporary smoke data is not evidence and no smoke metrics are claimed.
+
+## Quick prototype for the downloaded A/B PNG folders
+
+If your extracted folder contains `train_A`, `train_B`, `val_A`, `val_B`, `test_A`, and `test_B`, you can create a paired manifest directly:
+
+```bash
+python scripts/prepare_png_split_manifest.py \
+  --data-root "data/raw/SEN12MS/archive/sen12ms_SUMMER" \
+  --licence-note "SEN12MS official download; verify the applicable terms"
+python -m ml.src.train --config ml/configs/train_default.json \
+  --epochs 5 --max-train-tiles 1000 --max-validation-tiles 200
+python -m ml.src.evaluate --manifest data/manifests/tiles.json \
+  --checkpoint backend/checkpoints/vyora_resunet.pt --max-test-tiles 200
+```
+
+The manifest step checks that A/B filenames pair in each split. This PNG prototype treats grayscale A as one input duplicated into two network channels and B as RGB; it is **not a verified two-polarization VV/VH training run**. Since PNGs do not retain map coordinates, use A-side PNGs for this prototype and do not expect a georeferenced export. The training script needs PyTorch installed. The local checkpoint is ignored by Git; do not push the 34 GB dataset.
 
 ## Documentation
 

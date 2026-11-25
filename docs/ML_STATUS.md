@@ -1,27 +1,9 @@
-# ML completion status
+# ML status
 
-Checked on the active branch after the code-level smoke run.
-
-| Area | Status |
-|---|---|
-| ResU-Net architecture | Implemented: VV/VH input (2 channels) → RGB-style output (3 channels) |
-| GeoTIFF inference preprocessing | Implemented and tested with integer pixels and NoData values; expects prepared/calibrated input |
-| Paired data loader | Implemented for aligned VV/VH and visible RGB tiles; CRS/transform checks and relative manifest paths covered by tests |
-| Train/validation/test leakage guard | Implemented at `scene_group` level |
-| Training loop | Implemented; one-epoch temporary smoke run completed on artificial PNG pairs only |
-| Evaluation code | Implemented: MAE, PSNR, SSIM, edge alignment and latency |
-| Real training data | **0 real paired tiles in this repository.** No SEN12MS subset or other licensed pair supplied |
-| Real model training | **0 meaningful epochs / 0 real training steps.** No trained checkpoint exists |
-| Real held-out evaluation | **Not run.** No real test split exists |
-| Model accuracy | **Unknown.** Do not quote the smoke-run numbers; they came from synthetic fixtures and were not saved as project results |
-
-The synthetic smoke run proves only that the training/evaluation scripts execute. It does not establish SAR colorization quality, geographic generalization, or useful confidence. Recheck the current workspace at any time with `python scripts/check_ml_readiness.py`.
-
-## What is still required for a real model
-
-1. Supply lawful, paired, co-registered Sentinel-1 VV/VH and Sentinel-2 visible tiles, with source/licence and scale metadata.
-2. Confirm the Sentinel-1 data has undergone the required radiometric calibration and terrain correction upstream. This repository does not do that processing.
-3. Assign `scene_group` by region/source scene and create separate train, validation and held-out test groups.
-4. Train the 2→3 channel model; save the actual checkpoint outside Git if size/licence requires it.
-5. Run evaluation on real held-out groups; inspect examples/failures and record hardware, split, preprocessing and metrics.
-6. Only then claim that a trained model is present. Until then the live app correctly uses the labelled development fallback.
+- **Objective:** compact paired Sentinel-1 VV/VH → Sentinel-2 RGB-style reconstruction, not classification.
+- **Real data:** SEN12MS has not been downloaded or inspected here; no real training/checkpoint/results exist yet. No accuracy claim is supported.
+- **Inspect and prepare:** for original GeoTIFFs, use `scripts/inspect_sen12ms_pair.py` then `scripts/prepare_sen12ms_manifest.py`; that path reserves validation by whole ROI and checks selected indexes and exact grid alignment. For the user's provided `train_A/B`, `val_A/B`, `test_A/B` PNG package, `scripts/prepare_png_split_manifest.py` pairs identical filenames and preserves the supplied directory splits. This PNG path duplicates grayscale A into two network channels; it is a prototype and does not prove separate VV/VH data or geographic split independence.
+- **Training:** ResU-Net script now checks for train/validation/test, preflights a sample from each split, uses the same VV/VH preprocessing as backend inference, saves the best checkpoint atomically, stops early if validation stalls, and writes training history. It has not yet been run with PyTorch and real data in this environment.
+- **Evaluation:** streams held-out examples without loading the entire test set into memory; reports paired optical similarity metrics against a simple baseline and saves worst-MAE four-panel examples. It has not been run on real data.
+- **Inference/demo:** a local checkpoint is automatically used by the API when present; otherwise the explicitly labelled development fallback remains. The app can export its model output as a 256×256 preview GeoTIFF with source extent/CRS retained—not as a full-resolution analytical raster.
+- **Tests:** 16 passed, 1 skipped using synthetic fixtures. These test code mechanics only and are not SEN12MS/model evidence.

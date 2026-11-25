@@ -40,12 +40,12 @@ python -m ml.src.evaluate \
   --output docs/evaluation_results.json
 ```
 
-`ml/src/evaluate.py` computes MAE, PSNR, full-image SSIM, edge preservation and CPU latency for both the model and a documented intensity-to-palette baseline, then writes a timestamped JSON file. Report only if the manifest is genuinely scene/region-held-out and the paired data is prepared/licensed. If the manifest or checkpoint is missing it prints a reason and writes nothing — it never writes placeholder metrics.
+`ml/src/evaluate.py` streams the held-out tiles, computes MAE, PSNR, full-image SSIM and edge preservation for both the model and a documented intensity-to-palette baseline, records CPU inference time, and saves the worst-MAE input/reference/prediction/error panels. Report only if the manifest is genuinely scene/region-held-out and the paired data is prepared/licensed. If the manifest, checkpoint, or test data is missing/invalid, it reports the reason and writes no metrics.
 
 ## Required evidence still to add
 
-- Four held-out input / optical reference / model output panels.
-- One failure or low-confidence example with an honest explanation.
+- Run the evaluator to create worst-MAE held-out input / optical reference / model output / error panels. The evaluator now saves these automatically; no real panels exist until a real model/data evaluation is run.
+- Explain at least one failure case honestly; worst-MAE panels are automatically listed in the JSON report.
 - A confidence-map example on a real scene.
 - A latency table with the test device and repeat count.
 

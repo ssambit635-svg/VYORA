@@ -1,11 +1,6 @@
-"""Held-out evaluation for the Vyora baseline.
+"""Stream a held-out manifest through the model, compare to optical targets, and save worst-case panels.
 
-Only writes a results file when BOTH a validated test manifest and a checkpoint
-exist. If either is missing it prints why and writes nothing: no placeholder or
-invented numbers are ever produced.
-
-Usage: python -m ml.src.evaluate --manifest data/manifests/tiles.json \
-           --checkpoint backend/checkpoints/vyora_resunet.pt
+No report is written unless a real test split and checkpoint exist.
 """
 from __future__ import annotations
 
@@ -16,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from ml.src.data import load_manifest, normalise_sar_pair, optical_target
 
@@ -31,7 +26,7 @@ def _display_path(path: Path) -> str:
 
 
 def _gaussian_filter(image: np.ndarray, sigma: float = 1.5, size: int = 11) -> np.ndarray:
-    coords = np.arange(size) - (size - 1) / 2
+    coords = np.arange(size, dtype=np.float32) - (size - 1) / 2
     kernel = np.exp(-(coords ** 2) / (2 * sigma ** 2))
     kernel /= kernel.sum()
     pad = size // 2
@@ -55,8 +50,8 @@ def ssim(pred: np.ndarray, target: np.ndarray) -> float:
     for ch in range(3):
         p, t = pred[..., ch, None], target[..., ch, None]
         mp, mt = _gaussian_filter(p), _gaussian_filter(t)
-        vp = _gaussian_filter(p * p) - mp * mp
-        vt = _gaussian_filter(t * t) - mt * mt
+        vp = np.maximum(_gaussian_filter(p * p) - mp * mp, 0)
+        vt = np.maximum(_gaussian_filter(t * t) - mt * mt, 0)
         cov = _gaussian_filter(p * t) - mp * mt
         score = ((2 * mp * mt + c1) * (2 * cov + c2)) / (
             (mp ** 2 + mt ** 2 + c1) * (vp + vt + c2)
@@ -67,8 +62,7 @@ def ssim(pred: np.ndarray, target: np.ndarray) -> float:
 
 def edge_preservation(pred: np.ndarray, target: np.ndarray) -> float:
     def edges(x: np.ndarray) -> np.ndarray:
-        grey = x.mean(axis=2)
-        gy, gx = np.gradient(grey)
+        gy, gx = np.gradient(x.mean(axis=2))
         return np.sqrt(gx ** 2 + gy ** 2)
 
     a, b = np.log1p(edges(pred) * 8).ravel(), np.log1p(edges(target) * 8).ravel()
@@ -77,99 +71,167 @@ def edge_preservation(pred: np.ndarray, target: np.ndarray) -> float:
 
 
 def pseudocolour_baseline(sar: np.ndarray) -> np.ndarray:
-    """Non-ML intensity-to-palette transform used as a documented comparison."""
-    palette = np.array([[0.09, 0.42, 0.62], [0.23, 0.61, 0.36], [0.78, 0.69, 0.50], [0.85, 0.55, 0.39]])
-    levels = np.clip((sar * 4).astype(int), 0, 3)
+    """A simple, non-ML comparator; not a scientific land-cover model."""
+    palette = np.array([[0.09, 0.42, 0.62], [0.23, 0.61, 0.36], [0.78, 0.69, 0.50], [0.85, 0.55, 0.39]], dtype=np.float32)
+    levels = np.clip((np.asarray(sar) * 4).astype(int), 0, 3)
     return palette[levels]
 
 
-def summarise(pairs: list[tuple[np.ndarray, np.ndarray]], predictor) -> dict:
-    maes, psnrs, ssims, edge_scores = [], [], [], []
-    perfect = 0
-    for sar, target in pairs:
-        pred = predictor(sar)
-        mse = float(np.mean((pred - target) ** 2))
-        maes.append(float(np.abs(pred - target).mean()))
-        if mse <= 1e-12:
-            perfect += 1
-        else:
-            psnrs.append(10.0 * np.log10(1.0 / mse))
-        ssims.append(ssim(pred, target))
-        edge_scores.append(edge_preservation(pred, target))
+def score_one(pred: np.ndarray, target: np.ndarray) -> dict[str, float | None]:
+    pred = np.clip(np.asarray(pred, dtype=np.float32), 0, 1)
+    target = np.clip(np.asarray(target, dtype=np.float32), 0, 1)
+    mse = float(np.mean((pred - target) ** 2))
     return {
-        "tiles": len(pairs),
-        "MAE_L1": round(float(np.mean(maes)), 5),
-        "PSNR_dB": round(float(np.mean(psnrs)), 5) if psnrs else None,
-        "PSNR_perfect_tiles": perfect,
-        "SSIM": round(float(np.mean(ssims)), 5),
-        "edge_preservation": round(float(np.mean(edge_scores)), 5),
+        "MAE_L1": float(np.mean(np.abs(pred - target))),
+        "PSNR_dB": None if mse <= 1e-12 else float(10.0 * np.log10(1.0 / mse)),
+        "SSIM": ssim(pred, target),
+        "edge_preservation": edge_preservation(pred, target),
     }
 
 
+def _mean_scores(scores: list[dict[str, float | None]]) -> dict:
+    if not scores:
+        return {"tiles": 0, "MAE_L1": None, "PSNR_dB": None, "PSNR_perfect_tiles": 0, "SSIM": None, "edge_preservation": None}
+    result = {"tiles": len(scores)}
+    for key in scores[0]:
+        values = [x[key] for x in scores if x[key] is not None]
+        result[key] = round(float(np.mean(values)), 5) if values else None
+    result["PSNR_perfect_tiles"] = sum(x["PSNR_dB"] is None for x in scores)
+    return result
+
+
+def _panel(sar: np.ndarray, target: np.ndarray, pred: np.ndarray) -> Image.Image:
+    radar = np.stack((sar[..., 0], sar[..., 1], (sar[..., 0] + sar[..., 1]) / 2), axis=-1)
+    error = np.clip(np.abs(pred - target) * 4, 0, 1)
+    arrays = [radar, target, pred, error]
+    titles = ["VV/VH diagnostic", "S2 RGB target", "Model estimate", "Absolute error x4"]
+    size = target.shape[0]
+    panel = Image.new("RGB", (size * len(arrays), size + 26), "white")
+    draw = ImageDraw.Draw(panel)
+    for i, (arr, title) in enumerate(zip(arrays, titles)):
+        image = Image.fromarray(np.round(np.clip(arr, 0, 1) * 255).astype(np.uint8), "RGB")
+        panel.paste(image, (i * size, 26))
+        draw.text((i * size + 4, 6), title, fill="black")
+    return panel
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", default="data/manifests/tiles.json")
     parser.add_argument("--checkpoint", default="backend/checkpoints/vyora_resunet.pt")
     parser.add_argument("--output", default="docs/evaluation_results.json")
+    parser.add_argument("--examples-dir", default="docs/evaluation_examples")
     parser.add_argument("--latency-runs", type=int, default=5)
+    parser.add_argument("--worst-examples", type=int, default=4)
+    parser.add_argument("--max-test-tiles", type=int, default=None, help="Deterministic test subset for a fast prototype check")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    manifest, checkpoint = ROOT / args.manifest, ROOT / args.checkpoint
+    manifest = Path(args.manifest)
+    checkpoint = Path(args.checkpoint)
+    manifest = manifest if manifest.is_absolute() else ROOT / manifest
+    checkpoint = checkpoint if checkpoint.is_absolute() else ROOT / checkpoint
     if not manifest.is_file():
-        print(f"No evaluation performed: manifest not found at {manifest}.")
-        return
+        parser.exit(1, f"No evaluation performed: manifest not found at {manifest}.\n")
     if not checkpoint.is_file():
-        print(f"No evaluation performed: checkpoint not found at {checkpoint}.")
-        return
+        parser.exit(1, f"No evaluation performed: checkpoint not found at {checkpoint}.\n")
+    if args.worst_examples < 1:
+        parser.error("--worst-examples must be at least 1")
 
-    rows = [r for r in load_manifest(manifest) if r["split"] == "test"]
+    try:
+        rows = [r for r in load_manifest(manifest) if r["split"] == "test"]
+    except Exception as exc:
+        parser.exit(1, f"No evaluation performed: test manifest validation failed: {exc}\n")
     if not rows:
-        print("No evaluation performed: manifest contains no 'test' split tiles.")
-        return
+        parser.exit(1, "No evaluation performed: manifest contains no 'test' split tiles.\n")
+    total_test_tiles = len(rows)
+    if args.max_test_tiles is not None:
+        if args.max_test_tiles < 1:
+            parser.error("--max-test-tiles must be positive")
+        if len(rows) > args.max_test_tiles:
+            import random
+            rows = random.Random(args.seed).sample(rows, args.max_test_tiles)
+            print(f"Prototype evaluation subset: {len(rows)} of {total_test_tiles} test tiles (seed {args.seed}).")
 
-    pairs = [(normalise_sar_pair(row), optical_target(row)) for row in rows]
-    baseline = summarise(
-        [(sar.mean(axis=-1), target) for sar, target in pairs], pseudocolour_baseline
-    )
-
-    import torch
-
-    from ml.src.model import build_model
-
-    saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
-    model = build_model(int(saved.get("base_channels", 24)), input_channels=int(saved.get("input_channels", 2)))
-    model.load_state_dict(saved["state_dict"])
-    model.eval()
+    try:
+        import torch
+        from ml.src.model import build_model
+        try:
+            saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        except TypeError:
+            saved = torch.load(checkpoint, map_location="cpu")
+        model = build_model(int(saved.get("base_channels", 24)), input_channels=int(saved.get("input_channels", 2)))
+        model.load_state_dict(saved["state_dict"])
+        model.eval()
+    except Exception as exc:
+        parser.exit(1, f"No evaluation performed: checkpoint could not be loaded: {exc}\n")
 
     def predict(sar: np.ndarray) -> np.ndarray:
         x = torch.from_numpy(np.moveaxis(sar, -1, 0)[None, ...].copy()).float()
         with torch.inference_mode():
-            rgb = model(x)
-        return rgb[0].permute(1, 2, 0).numpy()
+            return model(x)[0].permute(1, 2, 0).cpu().numpy()
 
-    model_scores = summarise(pairs, predict)
-    timings = []
-    with torch.inference_mode():
-        for sar, _target in pairs[: max(1, args.latency_runs)]:
-            x = torch.from_numpy(np.moveaxis(sar, -1, 0)[None, ...].copy()).float()
+    baseline_scores: list[dict[str, float]] = []
+    model_scores: list[dict[str, float]] = []
+    latencies: list[float] = []
+    worst: list[tuple[float, str, Image.Image, dict]] = []
+    try:
+        for row in rows:
+            sar = normalise_sar_pair(row)
+            target = optical_target(row)
+            baseline = pseudocolour_baseline(sar.mean(axis=-1))
+            baseline_scores.append(score_one(baseline, target))
             start = time.perf_counter()
-            model(x)
-            timings.append((time.perf_counter() - start) * 1000)
-    model_scores["median_latency_ms_cpu"] = round(float(np.median(timings)), 2)
+            pred = predict(sar)
+            if len(latencies) < max(1, args.latency_runs):
+                latencies.append((time.perf_counter() - start) * 1000)
+            scores = score_one(pred, target)
+            model_scores.append(scores)
+            panel = _panel(sar, target, pred)
+            detail = {"tile_id": row["tile_id"], "scene_group": row["scene_group"],
+                      **{k: (round(v, 5) if v is not None else None) for k, v in scores.items()}}
+            worst.append((scores["MAE_L1"], str(row["tile_id"]), panel, detail))
+            worst.sort(key=lambda item: item[0], reverse=True)
+            del worst[args.worst_examples:]
+    except Exception as exc:
+        parser.exit(1, f"No evaluation report written: failed while reading/evaluating a test tile: {exc}\n")
 
+    examples_dir = Path(args.examples_dir)
+    examples_dir = examples_dir if examples_dir.is_absolute() else ROOT / examples_dir
+    examples_dir.mkdir(parents=True, exist_ok=True)
+    example_meta = []
+    for _mae, tile_id, image, detail in worst:
+        safe_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in tile_id)
+        image_path = examples_dir / f"worst_{safe_id}.png"
+        image.save(image_path)
+        example_meta.append({**detail, "panel": _display_path(image_path)})
+
+    png_folder_split = any("A/B PNG export" in row.get("source", "") for row in rows)
+    split_note = (
+        "provided train/validation/test folders (geographic independence not independently verified)"
+        if png_folder_split else
+        "test (manifest scene groups are kept exclusive across splits)"
+    )
     result = {
         "status": "evaluated",
         "date": datetime.now(timezone.utc).isoformat(),
         "checkpoint": _display_path(checkpoint),
         "manifest": _display_path(manifest),
-        "split": "test (geographically separated scene groups)",
+        "test_tiles": len(rows),
+        "total_test_tiles_in_manifest": total_test_tiles,
+        "test_scene_groups": len({row["scene_group"] for row in rows}),
+        "split": split_note,
         "methods": {
-            "pseudocolour_baseline": baseline,
-            "resunet_model": model_scores,
+            "pseudocolour_baseline": _mean_scores(baseline_scores),
+            "resunet_model": _mean_scores(model_scores),
         },
-        "caveat": "Similarity to paired optical references on a small curated set; not a claim of true-colour reconstruction.",
+        "median_latency_ms_cpu_first_runs": round(float(np.median(latencies)), 2) if latencies else None,
+        "worst_test_examples_by_MAE": example_meta,
+        "caveat": "Similarity to paired optical reference pixels on this held-out dataset split only; not true-colour recovery or geographic correctness.",
     }
-    output = ROOT / args.output
+    output = Path(args.output)
+    output = output if output.is_absolute() else ROOT / output
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
 

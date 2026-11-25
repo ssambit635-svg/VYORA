@@ -150,6 +150,8 @@ async def infer(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     runner = get_runner()
+    if getattr(runner, "input_representation", "") == "grayscale_A_PNG_duplicated" and decoded.input_kind == "geotiff-vv-vh":
+        raise HTTPException(status_code=400, detail="This prototype checkpoint was trained on grayscale A-side PNG tiles. Use an A-side PNG; it is not compatible with dual-band GeoTIFF input.")
     output = runner.infer(tile)
     runtime_ms = round((time.perf_counter() - started) * 1000, 1)
 
