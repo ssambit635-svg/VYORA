@@ -1,9 +1,9 @@
-"""Leakage-checked manifest and paired VV/VH -> optical tile dataset.
+"""Leakage-checked paired VV/VH -> optical tile dataset.
 
-Preferred manifest fields: tile_id, scene_group, split, sar_vv_path,
-sar_vh_path, optical_path, source, licence. Legacy `sar_path` is allowed for
-synthetic smoke tests only and is duplicated into VV/VH with a recorded warning.
-GeoTIFF pairs must be co-registered before being added to a manifest.
+A row may use separate `sar_vv_path`/`sar_vh_path` files, or a native stacked
+`sar_path` GeoTIFF with explicit 1-based `vv_band`/`vh_band` selectors.
+Multispectral targets use explicit `optical_bands` in R/G/B order. GeoTIFF
+pairs must be co-registered before being added to a manifest.
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+from common.sar_preprocessing import normalize_sar_pair as _shared_normalize_sar_pair
 
 BASE_COLUMNS = {"tile_id", "scene_group", "split", "optical_path", "source", "licence"}
 VALID_SPLITS = {"train", "validation", "test"}
@@ -27,7 +29,58 @@ def _paths(row: dict) -> tuple[str, ...]:
         return row["sar_vv_path"], row["sar_vh_path"], row["optical_path"]
     if "sar_path" in row:
         return row["sar_path"], row["optical_path"]
-    raise ManifestError("Rows must provide sar_vv_path + sar_vh_path (preferred) or legacy sar_path.")
+    raise ManifestError("Rows need separate sar_vv_path/sar_vh_path or one stacked sar_path with VV/VH band indexes.")
+
+
+def _validate_geotiff_layout(row: dict, paths: list[Path]) -> None:
+    """Validate raster grid and explicit 1-based band indexes when inputs are TIFFs."""
+    if not all(path.suffix.lower() in {".tif", ".tiff"} for path in paths):
+        return
+    try:
+        import rasterio
+    except ImportError as exc:
+        raise ManifestError("Install rasterio to validate GeoTIFF pairing and grid alignment.") from exc
+    if "sar_vv_path" in row and "sar_vh_path" in row:
+        vv_idx = int(row.get("vv_band", 1))
+        vh_idx = int(row.get("vh_band", 1))
+        try:
+            with rasterio.open(paths[0]) as vv, rasterio.open(paths[1]) as vh, rasterio.open(paths[2]) as optical:
+                rasters = (vv, vh, optical)
+                indexes = (vv_idx, vh_idx)
+                grids = [(ds.width, ds.height, ds.crs, ds.transform) for ds in rasters]
+                opt_bands = tuple(int(i) for i in row.get("optical_bands", (1, 2, 3)))
+                if vv_idx < 1 or vv_idx > vv.count or vh_idx < 1 or vh_idx > vh.count:
+                    raise ManifestError(f"Invalid VV/VH band index for {row['tile_id']}.")
+                if "optical_bands" not in row and optical.count != 3:
+                    raise ManifestError(f"Set optical_bands=[R,G,B] for multispectral target {row['tile_id']}.")
+                if len(opt_bands) != 3 or min(opt_bands) < 1 or max(opt_bands) > optical.count:
+                    raise ManifestError(f"Invalid optical_bands for {row['tile_id']}.")
+        except ManifestError:
+            raise
+        except Exception as exc:
+            raise ManifestError(f"Could not inspect GeoTIFFs for {row['tile_id']}: {exc}") from exc
+        if not (grids[0] == grids[1] == grids[2]):
+            raise ManifestError(f"VV, VH and optical grids are not co-registered for {row['tile_id']}.")
+        return
+
+    if "vv_band" not in row or "vh_band" not in row:
+        raise ManifestError(f"Stacked GeoTIFF {row['tile_id']} must declare 1-based vv_band and vh_band.")
+    try:
+        with rasterio.open(paths[0]) as sar, rasterio.open(paths[1]) as optical:
+            vv_idx, vh_idx = int(row["vv_band"]), int(row["vh_band"])
+            opt_bands = tuple(int(i) for i in row.get("optical_bands", (1, 2, 3)))
+            if min(vv_idx, vh_idx) < 1 or max(vv_idx, vh_idx) > sar.count:
+                raise ManifestError(f"Invalid VV/VH band index for {row['tile_id']}.")
+            if len(opt_bands) != 3 or min(opt_bands) < 1 or max(opt_bands) > optical.count:
+                raise ManifestError(f"optical_bands must list 3 valid R/G/B indexes for {row['tile_id']}.")
+            sar_grid = (sar.width, sar.height, sar.crs, sar.transform)
+            optical_grid = (optical.width, optical.height, optical.crs, optical.transform)
+    except ManifestError:
+        raise
+    except Exception as exc:
+        raise ManifestError(f"Could not inspect GeoTIFFs for {row['tile_id']}: {exc}") from exc
+    if sar_grid != optical_grid:
+        raise ManifestError(f"SAR and optical grids are not co-registered for {row['tile_id']}.")
 
 
 def build_manifest(rows: list[dict], output_path: str | Path, root: str | Path | None = None) -> Path:
@@ -56,15 +109,7 @@ def build_manifest(rows: list[dict], output_path: str | Path, root: str | Path |
             if not path.is_file():
                 raise ManifestError(f"Missing file for {row['tile_id']}: {path}")
             resolved.append(path)
-        if all(path.suffix.lower() in {".tif", ".tiff"} for path in resolved):
-            try:
-                import rasterio
-                with rasterio.open(resolved[0]) as vv, rasterio.open(resolved[1]) as vh, rasterio.open(resolved[2]) as optical:
-                    grids = [(ds.width, ds.height, ds.crs, ds.transform) for ds in (vv, vh, optical)]
-                if not (grids[0] == grids[1] == grids[2]):
-                    raise ManifestError(f"VV, VH and optical grids are not co-registered for {row['tile_id']}.")
-            except ImportError as exc:
-                raise ManifestError("Install rasterio to validate GeoTIFF pairing and grid alignment.") from exc
+        _validate_geotiff_layout(row, resolved)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     root_reference = os.path.relpath(root, output.parent.resolve())
@@ -106,6 +151,7 @@ def load_manifest(path: str | Path) -> list[dict]:
                 image_path = Path(row[key])
                 if not image_path.is_absolute():
                     row[key] = str((root / image_path).resolve())
+        _validate_geotiff_layout(row, [Path(item) for item in _paths(row)])
     return rows
 
 
@@ -118,8 +164,8 @@ def _read_image(path: str | Path, bands: tuple[int, ...] | None = None) -> np.nd
             raise RuntimeError("Install rasterio to read SEN12MS/GeoTIFF training tiles.") from exc
         with rasterio.open(path) as ds:
             indexes = bands or tuple(range(1, min(ds.count, 3) + 1))
-            if max(indexes) > ds.count:
-                raise ValueError(f"{path} has {ds.count} bands, needs {indexes}.")
+            if not indexes or min(indexes) < 1 or max(indexes) > ds.count:
+                raise ValueError(f"{path} has {ds.count} bands, needs 1-based indexes {indexes}.")
             data = ds.read(indexes, masked=True).astype(np.float32).filled(np.nan)
         return np.moveaxis(data, 0, -1)
     with Image.open(path) as img:
@@ -149,17 +195,24 @@ def _resize_float(image: np.ndarray, size: int) -> np.ndarray:
 
 
 def normalise_sar_pair(row: dict, size: int = 256) -> np.ndarray:
-    """Return VV/VH in H x W x 2. Legacy grayscale rows duplicate channels."""
+    """Return VV/VH in H x W x 2 from separate files or a stacked GeoTIFF."""
     if "sar_vv_path" in row and "sar_vh_path" in row:
-        vv = _read_image(row["sar_vv_path"], (1,))[..., :1]
-        vh = _read_image(row["sar_vh_path"], (1,))[..., :1]
+        vv = _read_image(row["sar_vv_path"], (int(row.get("vv_band", 1)),))[..., :1]
+        vh = _read_image(row["sar_vh_path"], (int(row.get("vh_band", 1)),))[..., :1]
         if vv.shape[:2] != vh.shape[:2]:
             raise ValueError(f"VV and VH dimensions are not aligned for {row['tile_id']}.")
+        pair = np.concatenate((vv, vh), axis=-1)
+    elif "vv_band" in row and "vh_band" in row:
+        path = row["sar_path"]
+        if Path(path).suffix.lower() not in {".tif", ".tiff"}:
+            raise ValueError("Explicit VV/VH band indexes require a multiband GeoTIFF.")
+        vv = _read_image(path, (int(row["vv_band"]),))[..., :1]
+        vh = _read_image(path, (int(row["vh_band"]),))[..., :1]
         pair = np.concatenate((vv, vh), axis=-1)
     else:
         legacy = _read_image(row["sar_path"], (1,))
         pair = np.repeat(legacy, 2, axis=-1)
-    return _resize_float(pair, size)
+    return _shared_normalize_sar_pair(pair, size=size)
 
 
 def normalise_sar(path_or_row: str | Path | dict, size: int = 256) -> np.ndarray:
@@ -172,19 +225,27 @@ def normalise_sar(path_or_row: str | Path | dict, size: int = 256) -> np.ndarray
 
 def optical_target(row: dict, size: int = 256) -> np.ndarray:
     path = Path(row["optical_path"])
-    target = _read_image(path)
-    if target.shape[-1] < 3:
-        raise ValueError(f"Optical target needs three visible bands (R/G/B order): {row['tile_id']}.")
-    target = target[..., :3].astype(np.float32)
-    if path.suffix.lower() in {".tif", ".tiff"}:
-        # Record optical_scale explicitly: raw Sentinel-2 surface reflectance is commonly
-        # stored as integer-scaled values; pre-normalized data should set optical_scale=1.
+    is_tiff = path.suffix.lower() in {".tif", ".tiff"}
+    if is_tiff:
+        import rasterio
+        with rasterio.open(path) as dataset:
+            if "optical_bands" not in row and dataset.count != 3:
+                raise ValueError(f"Set optical_bands=[R,G,B] for multispectral target {row['tile_id']}.")
+            bands = tuple(int(i) for i in row.get("optical_bands", (1, 2, 3)))
+            if len(bands) != 3 or min(bands) < 1 or max(bands) > dataset.count:
+                raise ValueError(f"optical_bands must specify 3 valid 1-based R/G/B indexes for {row['tile_id']}.")
+        target = _read_image(path, bands).astype(np.float32)
+        # Confirm scale from the exact SEN12MS release/metadata. The default is common
+        # for integer-scaled reflectance; set optical_scale=1 for [0,1] inputs.
         scale = float(row.get("optical_scale", 10000.0))
         if scale <= 0:
             raise ValueError(f"optical_scale must be positive for {row['tile_id']}.")
         target = np.clip(np.nan_to_num(target / scale), 0, 1)
     else:
-        target = np.clip(target / 255.0, 0, 1)
+        target = np.asarray(_read_image(path), dtype=np.float32)
+        if target.shape[-1] < 3:
+            raise ValueError(f"Optical target needs three visible bands (R/G/B order): {row['tile_id']}.")
+        target = np.clip(target[..., :3] / 255.0, 0, 1)
     resized = []
     for channel in range(3):
         im = Image.fromarray(target[..., channel].astype(np.float32), mode="F")

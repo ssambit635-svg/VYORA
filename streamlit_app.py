@@ -64,7 +64,10 @@ if st.button("Interpret scene", type="primary", width="stretch"):
             st.stop()
         decoded = decode_sar(payload, filename)
         tile = preprocess_pair(decoded.channels)
-        output = get_runner().infer(tile)
+        runner = get_runner()
+        if getattr(runner, "input_representation", "") == "grayscale_A_PNG_duplicated" and decoded.input_kind == "geotiff-vv-vh":
+            raise ValueError("This prototype checkpoint was trained on grayscale A-side PNG tiles. Use an A-side PNG; it is not compatible with dual-band GeoTIFF input.")
+        output = runner.infer(tile)
         mean_band = tile.mean(axis=-1)
         # VV=red, VH=green, mean=blue; diagnostic radar composite, not optical RGB.
         radar_rgb = np.clip(np.stack((tile[..., 0], tile[..., 1], mean_band), axis=-1) * 255, 0, 255).astype(np.uint8)

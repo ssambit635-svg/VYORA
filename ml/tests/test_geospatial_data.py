@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,30 @@ from rasterio.transform import from_origin
 
 from backend.app.core.geospatial import preprocess_pair
 from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_sar_pair, optical_target
+from ml.src.evaluate import _mean_scores, _panel, score_one
+from ml.src.sen12ms import create_sen12ms_manifest
+
+
+def test_training_and_inference_use_identical_sar_preprocessing():
+    vv = np.tile(np.linspace(-20, 5, 40, dtype=np.float32), (32, 1))
+    vh = np.tile(np.linspace(-30, 0, 40, dtype=np.float32)[::-1], (32, 1))
+    channels = np.stack((vv, vh), axis=-1)
+    assert np.array_equal(preprocess_pair(channels, size=16), normalise_sar_pair_from_array(channels, size=16))
+
+
+def normalise_sar_pair_from_array(channels: np.ndarray, size: int):
+    from common.sar_preprocessing import normalize_sar_pair
+    return normalize_sar_pair(channels, size=size)
+
+
+def test_evaluation_metrics_and_failure_panel_are_well_formed():
+    target = np.zeros((16, 16, 3), dtype=np.float32)
+    scores = score_one(target, target)
+    assert scores["MAE_L1"] == 0 and scores["PSNR_dB"] is None
+    average = _mean_scores([scores])
+    assert average["PSNR_perfect_tiles"] == 1 and average["tiles"] == 1
+    sar = np.zeros((16, 16, 2), dtype=np.float32)
+    assert _panel(sar, target, target).size == (16 * 4, 16 + 26)
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():
@@ -61,6 +87,105 @@ def test_int16_geotiff_training_pair_handles_nodata_and_alignment(tmp_path: Path
     target = optical_target(loaded, size=16)
     assert sar.shape == (16, 16, 2) and target.shape == (16, 16, 3)
     assert np.isfinite(sar).all() and np.isfinite(target).all()
+
+
+def test_sen12ms_stacked_s1_and_multispectral_s2_bands(tmp_path: Path):
+    transform = from_origin(500000, 2200000, 10, 10)
+    common = {"driver": "GTiff", "width": 16, "height": 12, "dtype": "int16",
+              "crs": "EPSG:32645", "transform": transform}
+    s1_path, s2_path = tmp_path / "ROIs1868_summer_s1_0_p0.tif", tmp_path / "ROIs1868_summer_s2_0_p0.tif"
+    with rasterio.open(s1_path, "w", **common, count=2) as ds:
+        vv = np.tile(np.arange(16, dtype=np.int16) * 50, (12, 1))
+        vh = np.tile(np.arange(16, dtype=np.int16)[::-1] * 40, (12, 1))
+        ds.write(np.stack((vv, vh)))
+    with rasterio.open(s2_path, "w", **common, count=4) as ds:
+        for band, value in enumerate((1000, 2000, 3000, 4000), start=1):
+            ds.write(np.full((12, 16), value, dtype=np.int16), band)
+    row = {"tile_id": "ROIs1868_summer_0", "scene_group": "ROIs1868", "split": "train",
+           "sar_path": s1_path.name, "vv_band": 1, "vh_band": 2,
+           "optical_path": s2_path.name, "optical_bands": [4, 3, 2], "optical_scale": 10000,
+           "source": "SEN12MS test fixture", "licence": "test-only"}
+    manifest = build_manifest([row], tmp_path / "manifests/tiles.json", root=tmp_path)
+    loaded = load_manifest(manifest)[0]
+    sar = normalise_sar_pair(loaded, size=16)
+    target = optical_target(loaded, size=16)
+    assert sar.shape == (16, 16, 2) and not np.allclose(sar[..., 0], sar[..., 1])
+    assert target[8, 8] == pytest.approx([0.4, 0.3, 0.2], abs=1e-6)
+
+
+def test_sen12ms_stacked_s1_and_multispectral_s2_bands(tmp_path: Path):
+    transform = from_origin(500000, 2200000, 10, 10)
+    common = {"driver": "GTiff", "width": 16, "height": 12, "dtype": "int16",
+              "crs": "EPSG:32645", "transform": transform}
+    s1_path, s2_path = tmp_path / "ROIs1868_summer_s1_0_p0.tif", tmp_path / "ROIs1868_summer_s2_0_p0.tif"
+    with rasterio.open(s1_path, "w", **common, count=2) as ds:
+        vv = np.tile(np.arange(16, dtype=np.int16) * 50, (12, 1))
+        vh = np.tile(np.arange(16, dtype=np.int16)[::-1] * 40, (12, 1))
+        ds.write(np.stack((vv, vh)))
+    with rasterio.open(s2_path, "w", **common, count=4) as ds:
+        for band, value in enumerate((1000, 2000, 3000, 4000), start=1):
+            ds.write(np.full((12, 16), value, dtype=np.int16), band)
+    row = {"tile_id": "ROIs1868_summer_0", "scene_group": "ROIs1868", "split": "train",
+           "sar_path": s1_path.name, "vv_band": 1, "vh_band": 2,
+           "optical_path": s2_path.name, "optical_bands": [4, 3, 2], "optical_scale": 10000,
+           "source": "SEN12MS-format test fixture", "licence": "test-only"}
+    manifest = build_manifest([row], tmp_path / "manifests/tiles.json", root=tmp_path)
+    loaded = load_manifest(manifest)[0]
+    sar = normalise_sar_pair(loaded, size=16)
+    target = optical_target(loaded, size=16)
+    assert sar.shape == (16, 16, 2) and not np.allclose(sar[..., 0], sar[..., 1])
+    assert target[8, 8] == pytest.approx([0.4, 0.3, 0.2], abs=1e-6)
+
+
+def test_sen12ms_toolbox_lists_create_paired_manifest_and_roi_validation(tmp_path: Path):
+    root = tmp_path / "dataset"
+    root.mkdir()
+    transform = from_origin(500000, 2200000, 10, 10)
+    profile = {"driver": "GTiff", "width": 16, "height": 12, "dtype": "int16",
+               "count": 4, "crs": "EPSG:32645", "transform": transform}
+    train_files, test_files = [], []
+    for split, rois in (("train", ("ROIs0000", "ROIs0001", "ROIs0002")), ("test", ("ROIs0003",))):
+        for roi in rois:
+            for season in ("spring", "summer"):
+                stem = f"{roi}_{season}"
+                for sensor in ("s1", "s2"):
+                    with rasterio.open(root / f"{stem}_{sensor}_0_p0.tif", "w", **profile) as ds:
+                        for band in range(1, 5):
+                            ds.write(np.full((12, 16), 1000 * band, dtype=np.int16), band)
+                train_files.append(f"{stem}_s1_0_p0.tif") if split == "train" else test_files.append(f"{stem}_s1_0_p0.tif")
+    (root / "train_list.txt").write_text("\n".join(train_files), encoding="utf-8")
+    (root / "test_list.txt").write_text("\n".join(test_files), encoding="utf-8")
+    manifest = create_sen12ms_manifest(root, "train_list.txt", "test_list.txt", tmp_path / "out/manifest.json",
+                                       vv_band=1, vh_band=2, rgb_bands=(4, 3, 2), optical_scale=10000,
+                                       validation_fraction=0.34, licence_note="synthetic test fixture")
+    rows = load_manifest(manifest)
+    split_groups = {split: {row["scene_group"] for row in rows if row["split"] == split}
+                    for split in ("train", "validation", "test")}
+    assert all(split_groups[a].isdisjoint(split_groups[b]) for a, b in (("train", "validation"), ("train", "test"), ("validation", "test")))
+    assert len([row for row in rows if row["split"] == "test"]) == 2
+    assert all(row["vv_band"] == 1 and row["vh_band"] == 2 and row["optical_bands"] == [4, 3, 2] for row in rows)
+
+
+def test_png_a_b_split_folders_make_manifest_and_pairs(tmp_path: Path):
+    root = tmp_path / "paired_png"
+    for split in ("train", "val", "test"):
+        (root / f"{split}_A").mkdir(parents=True)
+        (root / f"{split}_B").mkdir(parents=True)
+        name = "ROIs1868_summer_s000147_p000612.png"
+        Image.fromarray(np.tile(np.arange(32, dtype=np.uint8), (24, 1))).save(root / f"{split}_A" / name)
+        Image.fromarray(np.full((24, 32, 3), [20, 120, 200], dtype=np.uint8)).save(root / f"{split}_B" / name)
+    output = tmp_path / "manifest.json"
+    result = subprocess.run([
+        sys.executable, "scripts/prepare_png_split_manifest.py", "--data-root", str(root),
+        "--output", str(output), "--licence-note", "synthetic test fixture",
+    ], cwd=Path(__file__).resolve().parents[2], check=True, capture_output=True, text=True)
+    assert "Paired PNG tiles: 3" in result.stdout
+    rows = load_manifest(output)
+    train = next(row for row in rows if row["split"] == "train")
+    sar = normalise_sar_pair(train, size=16)
+    target = optical_target(train, size=16)
+    assert sar.shape == (16, 16, 2) and np.array_equal(sar[..., 0], sar[..., 1])
+    assert target.shape == (16, 16, 3) and target[8, 8, 1] == pytest.approx(120 / 255, abs=1e-5)
 
 
 def test_manifest_resolves_relative_paths_from_declared_data_root(tmp_path: Path):

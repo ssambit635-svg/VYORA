@@ -51,6 +51,7 @@ class _BaseRunner:
     mode: str = "development"
     model_version: str = "dev-heuristic-v0"
     is_ai_inference: bool = False
+    input_representation: str = "VV_VH_pair"
 
     def infer(self, tile: np.ndarray) -> InferenceOutput:
         raise NotImplementedError
@@ -100,6 +101,7 @@ class CheckpointRunner(_BaseRunner):
         base = int(saved.get("base_channels", 24))
         input_channels = int(saved.get("input_channels", 2))
         self.input_channels = input_channels
+        self.input_representation = str(saved.get("input_representation", "VV_VH_pair"))
         self.model_version = str(saved.get("version", "resunet-unversioned"))
         self.model = build_model(base_channels=base, input_channels=input_channels)
         self.model.load_state_dict(state)

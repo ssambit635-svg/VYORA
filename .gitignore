@@ -16,6 +16,7 @@ frontend/dist/
 *.pth
 *.ckpt
 ml/checkpoints/
+backend/checkpoints/training_history.csv
 ml/data/raw/
 data/raw/
 data/private/
