@@ -1,39 +1,42 @@
 # Model card — Vyora paired-PNG prototype
 
-## Current checkpoint status
+## Current checkpoint
 
-The repository contains a **legacy experimental checkpoint**, trained from the earlier A→B manifest direction. A folder audit shows that A files usually have RGB channel variation while B files are grayscale. The loader converted A to grayscale and trained against grayscale B targets. Therefore the checkpoint did **not** learn the intended grayscale-to-colour mapping; do not present it as a colourization model.
+`backend/checkpoints/vyora_resunet_b_to_a.pt` is the corrected prototype checkpoint included in the repository. It uses grayscale B-side PNG input (copied into two identical model channels) to predict A-side image pixels. The direction is based on sampled A/B RGB statistics, not verified sensor provenance: do not claim that this is a calibrated Sentinel-1 VV/VH → Sentinel-2 model.
 
-| Field | Legacy checkpoint |
+| Field | Current implementation |
 |---|---|
-| Input used in old run | A-side PNG converted to grayscale, duplicated into two channels |
-| Target used in old run | B-side PNG; sampled targets were grayscale |
 | Architecture | Compact ResU-Net encoder/decoder with skip connections |
-| Checkpoint | `backend/checkpoints/vyora_resunet.pt` |
+| Input / target | Grayscale B-side PNG → A-side RGB-style PNG |
 | Training reported | CPU; 1,000 train tiles, 200 validation tiles, 5 epochs |
-| Evaluation | 200 of 4,576 test tiles, historical old-direction audit; not a colourization benchmark |
-| Geospatial metadata | None in PNG input |
+| Best validation loss | 0.16335 at epoch 5 |
+| Evaluation | 200 of 4,576 supplied test tiles; see [EVALUATION.md](EVALUATION.md) |
+| Geospatial metadata | None in PNG; output is not georeferenced |
+| Classification | No water/flood/vegetation/building/land-cover head |
 
-## Corrected experiment direction
+A legacy A→B checkpoint is also present for history/compatibility. It was trained against grayscale B targets and is not a valid colourization model. Use the `b_to_a` checkpoint for the current experiment.
 
-The folder audit suggests testing grayscale B input → A-side target. The updated manifest builder defaults to that direction and records the side explicitly. This is a **working assumption based on PNG channel statistics**, not proof that B is Sentinel-1 SAR or that A is true optical satellite imagery. Verify one pair visually and check source provenance before calling it SAR-to-optical.
+## Performance caveat
 
-The old checkpoint must not be resumed for the corrected direction. Train a separate checkpoint from scratch, select with validation data, and report test results only after the target files are confirmed colourful and correctly paired.
+On the reported test subset, the ResU-Net has lower MAE and higher SSIM than a simple pseudocolour baseline. However, average prediction RGB spread is only 0.03778 versus 0.13053 in the paired target, indicating under-colourization. Some worst-error examples are substantially worse than the average. This is early evidence, not production validation.
 
-## Intended and prohibited use
+## Intended use
 
-For now, educational exploration and a hackathon demonstrator only. Not for official maps, flood/cyclone warnings, evacuation, emergency response, safety-critical decisions, land-cover statistics, or recovering true visible colour.
+Educational exploration and a hackathon demonstration only. Treat output as a rough visual estimate; consult original imagery and authoritative sources.
 
-## Metrics and outputs
+## Not intended for
 
-- The model predicts image pixels; it has no learned water/flood/vegetation/building classes or uncertainty head.
-- The consistency layer compares original and horizontally flipped predictions. It is not calibrated uncertainty.
-- The live structure proxy compares input/output gradient patterns. It is not accuracy against the paired target.
-- RGB channel spread diagnoses whether a prediction is nearly grayscale; it is not a quality score alone.
+Official maps, flood/cyclone warnings, evacuation, emergency response, safety-critical decisions, land-cover statistics, or recovering true visible colour.
 
-## Key limitations
+## Metric meanings
 
-- A/B sensor semantics, licence, provenance, and exact geographic split are not independently verified.
-- PNGs have no CRS/transform; no spatially correct map can be produced from them.
-- Visual similarity to a paired target is not geographic correctness or operational utility.
-- The 34 GB source archive is not included in GitHub.
+- Flip-view consistency is prediction stability under a simple transformation, not calibrated uncertainty.
+- The live structure proxy compares input/output gradient patterns; it is not accuracy against the paired target.
+- RGB channel spread diagnoses colour collapse; it is not a quality score by itself.
+
+## Known limitations
+
+- A/B sensor semantics, data licence, source provenance, and geographic independence of folder splits are not independently verified.
+- PNGs have no CRS/transform.
+- Visual similarity to paired pixels is not geographic correctness or operational utility.
+- The source archive is not included in GitHub.
