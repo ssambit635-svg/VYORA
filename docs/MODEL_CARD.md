@@ -1,50 +1,39 @@
-# Model card — Vyora Sentinel-1 VV/VH → Sentinel-2-style baseline
+# Model card — Vyora paired-PNG prototype
 
-## Current status
+## Current checkpoint status
 
-**No paired SEN12MS subset or trained checkpoint is included. No held-out results are claimed.** The running demo defaults to `dev-heuristic-v0` and is not AI inference. Synthetic samples demonstrate only the interface; they are not satellite data.
+The repository contains a **legacy experimental checkpoint**, trained from the earlier A→B manifest direction. A folder audit shows that A files usually have RGB channel variation while B files are grayscale. The loader converted A to grayscale and trained against grayscale B targets. Therefore the checkpoint did **not** learn the intended grayscale-to-colour mapping; do not present it as a colourization model.
 
-| Field | Current status |
+| Field | Legacy checkpoint |
 |---|---|
-| Product task | Estimate an optical-style RGB visual layer from dual-polarization Sentinel-1 backscatter |
-| Planned baseline | Compact ResU-Net generator, input VV+VH (2 channels), output RGB-style 3 channels |
-| Active API runner | `dev-heuristic-v0` unless a checkpoint exists |
-| Checkpoint | None bundled; expected at `backend/checkpoints/vyora_resunet.pt` |
-| Training set | None bundled; SEN12MS is the intended source, subject to licence/access, pair/grid verification, and preprocessing |
-| Evaluation | Not run on real paired data |
+| Input used in old run | A-side PNG converted to grayscale, duplicated into two channels |
+| Target used in old run | B-side PNG; sampled targets were grayscale |
+| Architecture | Compact ResU-Net encoder/decoder with skip connections |
+| Checkpoint | `backend/checkpoints/vyora_resunet.pt` |
+| Training reported | CPU; 1,000 train tiles, 200 validation tiles, 5 epochs |
+| Evaluation | 200 of 4,576 test tiles, historical old-direction audit; not a colourization benchmark |
+| Geospatial metadata | None in PNG input |
 
-## Input contract
+## Corrected experiment direction
 
-- Preferred inference input: calibrated, terrain-corrected, co-registered, two-band GeoTIFF, band 1 = VV and band 2 = VH.
-- The service retains CRS and affine transform for the optional RGB-style GeoTIFF preview export.
-- Per-band preprocessing: finite-value handling, 2nd–98th percentile normalization, light 3×3 median filtering and resize to 256×256.
-- **This code does not perform Sentinel-1 radiometric calibration or terrain correction.** Supply already prepared imagery; verify the product level and units before model use.
-- PNG/JPEG and synthetic demos are accepted for interface testing. A single channel is duplicated to two channels and marked `single-channel-preview-duplicated`; it is not valid dual-polarization model evidence.
+The folder audit suggests testing grayscale B input → A-side target. The updated manifest builder defaults to that direction and records the side explicitly. This is a **working assumption based on PNG channel statistics**, not proof that B is Sentinel-1 SAR or that A is true optical satellite imagery. Verify one pair visually and check source provenance before calling it SAR-to-optical.
 
-## Architecture and objective
+The old checkpoint must not be resumed for the corrected direction. Train a separate checkpoint from scratch, select with validation data, and report test results only after the target files are confirmed colourful and correctly paired.
 
-`ml/src/model.py` defines a compact ResU-Net encoder/decoder with skip connections. Its only trained output is a sigmoid RGB-style image. The training objective is paired L1 reconstruction, SSIM structure loss and edge-preservation loss. There is no GAN/PatchGAN in the current baseline; Pix2Pix is a future experiment only.
+## Intended and prohibited use
 
-The model deliberately has **no learned confidence or land-cover class heads**: the paired image manifest has RGB targets but no uncertainty labels or class masks, so those heads could not be meaningfully supervised. This corrects the earlier prototype design. In checkpoint mode:
+For now, educational exploration and a hackathon demonstrator only. Not for official maps, flood/cyclone warnings, evacuation, emergency response, safety-critical decisions, land-cover statistics, or recovering true visible colour.
 
-- the consistency layer is the agreement between original and horizontally flipped predictions; it is not calibrated uncertainty;
-- the four feature-share cards are a fixed palette lookup on generated RGB, not learned classification or segmentation;
-- neither should be described as accuracy, calibrated probability, or ground-truth land cover.
+## Metrics and outputs
 
-## Data preparation and splits
-
-The preferred manifest schema is documented in `docs/DATA_CARD.md`. VV, VH and visible target bands must be aligned on the same grid. Geographic/scene groups are confined to one split. Sentinel-2 targets must be cloud-screened and the target scale/order recorded. The loader normalizes SAR bands independently; GeoTIFF optical targets use explicit `optical_scale` (default 10,000 for integer-scaled reflectance; set 1 for pre-normalized [0,1] data). Confirm source conventions before training.
-
-Train with `python -m ml.src.train --config ml/configs/train_default.json`; evaluate only against a separate test-region split with `python -m ml.src.evaluate`. Do not use synthetic demo scenes as training or validation evidence.
-
-## Intended and prohibited uses
-
-Intended only for educational visual exploration, a hackathon demonstrator, or first-look browsing followed by specialist review. Not for official mapping, flood/cyclone warnings, evacuation, emergency response, safety-critical decisions, or reconstruction of true visible colour.
+- The model predicts image pixels; it has no learned water/flood/vegetation/building classes or uncertainty head.
+- The consistency layer compares original and horizontally flipped predictions. It is not calibrated uncertainty.
+- The live structure proxy compares input/output gradient patterns. It is not accuracy against the paired target.
+- RGB channel spread diagnoses whether a prediction is nearly grayscale; it is not a quality score alone.
 
 ## Key limitations
 
-- Optical appearance is an estimate from paired observations and varies with season, time, clouds, illumination and sensor geometry.
-- Radar layover, shadow, speckle, terrain, calibration, co-registration and domain shift can invalidate the mapping.
-- GeoTIFF export retains spatial extent/CRS but is a 256×256 model preview; it is not a calibrated science-ready product.
-- Synthetic demos have no geography or optical reference.
-- Visual plausibility is not geographic correctness.
+- A/B sensor semantics, licence, provenance, and exact geographic split are not independently verified.
+- PNGs have no CRS/transform; no spatially correct map can be produced from them.
+- Visual similarity to a paired target is not geographic correctness or operational utility.
+- The 34 GB source archive is not included in GitHub.

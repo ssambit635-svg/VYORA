@@ -17,6 +17,11 @@ frontend/dist/
 *.ckpt
 ml/checkpoints/
 backend/checkpoints/training_history.csv
+# Local dataset manifests/reports can contain private absolute paths or derived imagery.
+data/manifests/tiles.json
+docs/evaluation_results*.json
+docs/evaluation_examples/
+docs/evaluation_examples_*/
 ml/data/raw/
 data/raw/
 data/private/

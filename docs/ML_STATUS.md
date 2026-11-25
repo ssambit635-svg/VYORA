@@ -1,9 +1,24 @@
 # ML status
 
-- **Objective:** compact paired Sentinel-1 VV/VH → Sentinel-2 RGB-style reconstruction, not classification.
-- **Real data:** SEN12MS has not been downloaded or inspected here; no real training/checkpoint/results exist yet. No accuracy claim is supported.
-- **Inspect and prepare:** for original GeoTIFFs, use `scripts/inspect_sen12ms_pair.py` then `scripts/prepare_sen12ms_manifest.py`; that path reserves validation by whole ROI and checks selected indexes and exact grid alignment. For the user's provided `train_A/B`, `val_A/B`, `test_A/B` PNG package, `scripts/prepare_png_split_manifest.py` pairs identical filenames and preserves the supplied directory splits. This PNG path duplicates grayscale A into two network channels; it is a prototype and does not prove separate VV/VH data or geographic split independence.
-- **Training:** ResU-Net script now checks for train/validation/test, preflights a sample from each split, uses the same VV/VH preprocessing as backend inference, saves the best checkpoint atomically, stops early if validation stalls, and writes training history. It has not yet been run with PyTorch and real data in this environment.
-- **Evaluation:** streams held-out examples without loading the entire test set into memory; reports paired optical similarity metrics against a simple baseline and saves worst-MAE four-panel examples. It has not been run on real data.
-- **Inference/demo:** a local checkpoint is automatically used by the API when present; otherwise the explicitly labelled development fallback remains. The app can export its model output as a 256×256 preview GeoTIFF with source extent/CRS retained—not as a full-resolution analytical raster.
-- **Tests:** 16 passed, 1 skipped using synthetic fixtures. These test code mechanics only and are not SEN12MS/model evidence.
+## Current state after paired-folder audit
+
+- The repository contains `backend/checkpoints/vyora_resunet.pt`, a **legacy experimental checkpoint**, not a validated colourization model.
+- In the old manifest, A was treated as input and B as target. The training loader converts A to grayscale; the audit found B targets grayscale too. The checkpoint learned an effectively grayscale-to-grayscale mapping.
+- A random sample of 100 files per folder found colour in A for 99/100 train and 99/100 test samples, and in B for 0/100 train and 0/100 test samples. This is visual-channel evidence only; it does not establish sensor semantics.
+- The reported 200-tile evaluation is a historical check of the old direction. It is not evidence of colourization performance; see [EVALUATION.md](EVALUATION.md).
+- The 34 GB image archive and local manifest are not in GitHub.
+
+## Corrected PNG training path
+
+- `scripts/prepare_png_split_manifest.py` now defaults to grayscale B-side input → A-side target, based on the channel audit. Use `--input-side A` only if another dataset's semantics require the reverse.
+- The manifest records `input_side` and `target_side`; the trainer refuses old PNG manifests without these fields.
+- Training preflight checks that the sampled PNG targets have visible RGB channel spread. It stops before writing a checkpoint if the targets are effectively grayscale.
+- The old A→B checkpoint cannot be resumed for the new B→A task; the representation marker intentionally rejects it. Train from scratch to a new checkpoint name, then validate and evaluate it.
+- This corrects the image direction only. It does not verify that the grayscale folder is genuine Sentinel-1 SAR, that the coloured folder is true optical imagery, or that the folder splits are geographically independent.
+
+## Other code support and limitations
+
+- `scripts/prepare_sen12ms_manifest.py` remains a separate path for inspected, aligned source GeoTIFFs with explicit band/scale choices.
+- `ml/src/evaluate.py` compares paired-target similarity against a simple palette baseline, reports colour-spread diagnostics, and saves failure panels. Metrics are not geographic accuracy.
+- The local React/FastAPI app can run the tracked legacy checkpoint; until a corrected checkpoint is trained, treat its output as a plumbing/demo result only.
+- No flood, water, vegetation, building, or land-cover classification head exists. Flip consistency is not calibrated uncertainty.

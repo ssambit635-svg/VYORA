@@ -5,6 +5,7 @@ import type { Health } from '../types'
 export function Header({ health }: { health: Health | null }) {
   const [open, setOpen] = useState(false)
   const isModel = health?.is_ai_inference
+  const isLegacyPng = health?.model_version.includes('paired-png-prototype-v0.1') ?? false
   return (
     <header className="site-header">
       <div className="container header-inner">
@@ -20,7 +21,9 @@ export function Header({ health }: { health: Health | null }) {
         <div className="header-side">
           <span className={`mode-pill ${isModel ? 'model' : 'dev'}`} title={health?.runner_note}>
             <Activity size={13} strokeWidth={2.2} />
-            {isModel ? 'MODEL MODE' : 'DEVELOPMENT MODE'}
+            {isModel
+              ? isLegacyPng ? 'LEGACY PNG MODEL' : health?.model_version.includes('paired-png-prototype') ? 'PNG PROTOTYPE' : 'MODEL MODE'
+              : 'DEVELOPMENT MODE'}
           </span>
           <button className="icon-btn menu-btn" onClick={() => setOpen(!open)} aria-label={open ? 'Close menu' : 'Open menu'}>
             {open ? <X size={20} /> : <Menu size={20} />}

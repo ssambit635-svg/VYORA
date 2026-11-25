@@ -1,24 +1,24 @@
-# Vyora live demo script (2–3 minutes)
+# Vyora hackathon demo script (2–3 minutes)
 
 ## Before the room
 
-- Install `requirements-ui.txt`; run `bash scripts/run_streamlit.sh` and confirm the app at port 8501.
-- Prepare one legally usable, calibrated/co-registered two-band GeoTIFF (VV band 1, VH band 2) if available. Confirm CRS, transform and output bounds. Never improvise calibration claims.
-- Keep the synthetic gallery fallback available if the real input/checkpoint fails; label it synthetic and development-mode.
-- Confirm checkpoint status in the UI. Do not call a fallback output AI-generated.
+- Start the FastAPI backend and React/Vite frontend.
+- **Do not present the legacy checkpoint as colourization:** it was trained A→B, while the folder audit found B grayscale and A colour-bearing.
+- For a corrected demo, first regenerate the manifest B→A, verify one pair with `scripts/inspect_png_pair.py`, train a new checkpoint and inspect held-out panels. The new checkpoint must actually be selected by the API before the demo.
+- Keep one verified grayscale input PNG ready and have `docs/EVALUATION.md` open. Do not imply that PNGs have map coordinates or verified VV/VH channels.
 
-## Talk track
+## Talk track after a corrected checkpoint is validated
 
-**Problem (20 sec):** “Sentinel-1 records microwave backscatter, not visible RGB. Dual-pol VV/VH is information-rich but difficult for non-specialists to scan. We are building a visual interpretation aid, not a map or warning product.”
+**Problem (20 sec):** “Radar-like grayscale imagery can be hard to scan. We are testing whether paired image learning can produce a useful colour-style visual aid.”
 
-**Method (30 sec):** “Our target workflow pairs calibrated Sentinel-1 VV/VH with co-registered Sentinel-2 visible targets. A compact U-Net is our stable first baseline. We split by geographic scene group to avoid nearby-patch leakage.”
+**Method (30 sec):** “In this experiment, B is the grayscale input and A is the colour-bearing paired target, based on our folder audit. These are PNGs, so this does not verify sensor identity, VV/VH channels or geospatial coordinates.”
 
-**Demo (45 sec):** Choose Upload SAR raster and load a prepared two-band GeoTIFF. Explain that bands 1/2 are VV/VH and show the CRS/extent. Interpret, compare the original radar preview with the estimated optical-style output, toggle the consistency map and download PNG/JSON/GeoTIFF preview. Explain that the preview export preserves the input extent and CRS but is 256×256, not an analytical product.
+**Demo (45 sec):** Upload the verified grayscale input, run inference, and move the slider between input and estimate. Toggle the consistency layer to show prediction stability under a flip; explain that stability is not confidence or accuracy. Download the PNG and JSON if asked.
 
-**Evidence (30 sec):** “The app status tells us whether a trained checkpoint is loaded. The bundled gallery is synthetic. We have no real-data held-out evaluation to report yet, so we will not invent MAE, SSIM, PSNR or accuracy.” If the team has subsequently trained and evaluated, replace this line with exact split/hardware/result evidence and show the saved report.
+**Evidence (30 sec):** Show only the corrected checkpoint's report, with its split, hardware, target references and failure examples. The earlier 200-tile report used the reversed direction and is not a colourization benchmark.
 
-**Limits (20 sec):** “An optical reference may differ in date, clouds and illumination, so generated appearance is not recovered true colour. Our consistency cue is flip-view agreement, not calibrated uncertainty. Always inspect original SAR and authoritative products.”
+**Limits (20 sec):** “This is an early visual estimate, not true-colour recovery, a map, land-cover classification or an emergency warning. We need better data provenance, geographic holdout and expert validation.”
 
-## Fallback
+## If corrected training is not complete
 
-If no trained checkpoint exists, say explicitly: “This run is the development fallback to demonstrate UI and input/export plumbing; it is not the learned model.” If no lawful real GeoTIFF is available, use the synthetic scene and explain it has no geography or polarizations.
+Present the app as a **pipeline demonstration only**, not as a successful colorization result. Show the folder audit and explain that the old checkpoint was trained in the wrong direction. Do not hide this by toggling or recolouring the output.

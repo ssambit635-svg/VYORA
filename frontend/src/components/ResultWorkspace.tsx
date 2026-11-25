@@ -14,6 +14,8 @@ export function ResultWorkspace({ result, onReset }: Props) {
   const [position, setPosition] = useState(50)
   const conf = result.confidence_summary
   const isDev = result.mode === 'development'
+  const isPngPrototype = result.model_version.includes('paired-png-prototype')
+  const isLegacyPngDirection = result.model_version.includes('paired-png-prototype-v0.1')
 
   return (
     <section className="results-section" aria-labelledby="results-title">
@@ -26,13 +28,17 @@ export function ResultWorkspace({ result, onReset }: Props) {
         <button className="ghost-btn" onClick={onReset}><RotateCcw size={15} /> New scene</button>
       </div>
 
-      <div className={`mode-banner ${isDev ? 'dev' : 'model'}`} role="note">
-        {isDev ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
+      <div className={`mode-banner ${isDev || isLegacyPngDirection ? 'dev' : 'model'}`} role="note">
+        {isDev || isLegacyPngDirection ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
         <div>
-          <strong>{isDev ? 'DEVELOPMENT MODE — not AI inference' : 'MODEL CHECKPOINT — AI inference'}</strong>
+          <strong>{isDev ? 'DEVELOPMENT MODE — not AI inference' : isLegacyPngDirection ? 'LEGACY CHECKPOINT — wrong training direction' : 'MODEL CHECKPOINT — AI inference'}</strong>
           <span>{isDev
             ? 'Output comes from fixed, hand-authored backscatter rules used to demonstrate the product flow. No trained model is running and no accuracy claim is made.'
-            : `Output was produced by the local ${result.model_version} checkpoint. The consistency cue comes from flipped-view agreement; it is not calibrated uncertainty.`}
+            : isLegacyPngDirection
+              ? 'This v0.1 checkpoint used A as input and B as target. The folder audit found B targets grayscale, so this is not a valid colourization result. Do not report it as colour recovery; use a newly trained B-to-A checkpoint.'
+              : isPngPrototype
+                ? `Output comes from the local ${result.model_version} checkpoint trained on paired PNG tiles with grayscale input duplicated into two model channels. This is not separate VV/VH input.`
+                : `Output was produced by the local ${result.model_version} checkpoint. The consistency cue comes from flipped-view agreement; it is not calibrated uncertainty.`}
           </span>
         </div>
       </div>
@@ -55,6 +61,8 @@ export function ResultWorkspace({ result, onReset }: Props) {
               showConfidence={showConfidence}
               position={position}
               onPosition={setPosition}
+              inputLabel={isPngPrototype ? 'GRAYSCALE PNG' : 'VV/VH INPUT'}
+              outputLabel={isPngPrototype ? 'MODEL ESTIMATE' : 'INTERPRETATION'}
             />
             <div className="compare-foot">
               <div className={`legend ${showConfidence ? 'visible' : ''}`}>
@@ -66,7 +74,14 @@ export function ResultWorkspace({ result, onReset }: Props) {
             </div>
           </div>
 
-          <FeatureCards estimates={result.feature_estimates} method={result.feature_method} />
+          {isPngPrototype ? (
+            <div className="panel prototype-note">
+              <h3>What this prototype predicts</h3>
+              <p>It predicts image pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
+            </div>
+          ) : (
+            <FeatureCards estimates={result.feature_estimates} method={result.feature_method} />
+          )}
         </div>
 
         <aside className="result-side">
@@ -90,7 +105,9 @@ export function ResultWorkspace({ result, onReset }: Props) {
 
           <div className="panel side-panel">
             <h3>Export result</h3>
-            <p className="micro-note">Download the 256×256 model preview and a machine-readable summary. GeoTIFF inputs also get an extent/CRS-preserving RGB preview export; it is not a calibrated analytical product.</p>
+            <p className="micro-note">{isPngPrototype
+              ? 'Download the 256×256 model preview and JSON summary. The PNG source has no map CRS/transform, so no georeferenced export is available.'
+              : 'Download the 256×256 model preview and a machine-readable summary. GeoTIFF inputs also get an extent/CRS-preserving RGB preview export; it is not a calibrated analytical product.'}</p>
             <div className="download-row">
               <a className="download-btn" href={result.urls.colour} download={`vyora-${result.result_id.slice(0, 8)}.png`}>
                 <ImageDown size={17} /> Output PNG <Download size={14} />

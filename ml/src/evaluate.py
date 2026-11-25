@@ -81,11 +81,17 @@ def score_one(pred: np.ndarray, target: np.ndarray) -> dict[str, float | None]:
     pred = np.clip(np.asarray(pred, dtype=np.float32), 0, 1)
     target = np.clip(np.asarray(target, dtype=np.float32), 0, 1)
     mse = float(np.mean((pred - target) ** 2))
+    # Mean per-pixel RGB spread is a simple diagnostic for colour collapse:
+    # grayscale predictions approach 0; colourful targets have a larger spread.
+    pred_rgb_spread = float(np.mean(pred.max(axis=2) - pred.min(axis=2)))
+    target_rgb_spread = float(np.mean(target.max(axis=2) - target.min(axis=2)))
     return {
         "MAE_L1": float(np.mean(np.abs(pred - target))),
         "PSNR_dB": None if mse <= 1e-12 else float(10.0 * np.log10(1.0 / mse)),
         "SSIM": ssim(pred, target),
         "edge_preservation": edge_preservation(pred, target),
+        "mean_rgb_channel_spread": pred_rgb_spread,
+        "target_rgb_channel_spread": target_rgb_spread,
     }
 
 
@@ -104,7 +110,7 @@ def _panel(sar: np.ndarray, target: np.ndarray, pred: np.ndarray) -> Image.Image
     radar = np.stack((sar[..., 0], sar[..., 1], (sar[..., 0] + sar[..., 1]) / 2), axis=-1)
     error = np.clip(np.abs(pred - target) * 4, 0, 1)
     arrays = [radar, target, pred, error]
-    titles = ["VV/VH diagnostic", "S2 RGB target", "Model estimate", "Absolute error x4"]
+    titles = ["Input preview", "Paired target", "Model estimate", "Absolute error x4"]
     size = target.shape[0]
     panel = Image.new("RGB", (size * len(arrays), size + 26), "white")
     draw = ImageDraw.Draw(panel)

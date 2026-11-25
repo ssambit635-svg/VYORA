@@ -14,7 +14,17 @@ from rasterio.transform import from_origin
 from backend.app.core.geospatial import preprocess_pair
 from ml.src.data import ManifestError, build_manifest, load_manifest, normalise_sar_pair, optical_target
 from ml.src.evaluate import _mean_scores, _panel, score_one
+from ml.src.train import manifest_uses_geotiff
 from ml.src.sen12ms import create_sen12ms_manifest
+from scripts.inspect_png_pair import _stats
+from scripts.prepare_png_split_manifest import pair_row
+
+
+def test_png_training_does_not_require_rasterio_but_geotiff_training_does():
+    png_rows = [{"sar_vv_path": "train_B/tile.png", "sar_vh_path": "train_B/tile.png", "optical_path": "train_A/tile.png"}]
+    tif_rows = [{"sar_path": "scene.tif", "optical_path": "target.tiff"}]
+    assert not manifest_uses_geotiff(png_rows)
+    assert manifest_uses_geotiff(tif_rows)
 
 
 def test_training_and_inference_use_identical_sar_preprocessing():
@@ -33,10 +43,42 @@ def test_evaluation_metrics_and_failure_panel_are_well_formed():
     target = np.zeros((16, 16, 3), dtype=np.float32)
     scores = score_one(target, target)
     assert scores["MAE_L1"] == 0 and scores["PSNR_dB"] is None
+    assert scores["mean_rgb_channel_spread"] == 0
+    assert scores["target_rgb_channel_spread"] == 0
     average = _mean_scores([scores])
     assert average["PSNR_perfect_tiles"] == 1 and average["tiles"] == 1
     sar = np.zeros((16, 16, 2), dtype=np.float32)
     assert _panel(sar, target, target).size == (16 * 4, 16 + 26)
+
+
+def test_evaluation_reports_colour_collapse_against_rgb_reference():
+    target = np.zeros((16, 16, 3), dtype=np.float32)
+    target[..., 1] = 0.8  # vivid green reference image
+    grey_prediction = np.repeat(target[..., 1:2] * 0.5, 3, axis=2)
+    scores = score_one(grey_prediction, target)
+    assert scores["mean_rgb_channel_spread"] == 0
+    assert scores["target_rgb_channel_spread"] > 0.7
+
+
+def test_png_inspector_distinguishes_green_target_from_grayscale(tmp_path: Path):
+    path = tmp_path / "green.png"
+    green = np.zeros((8, 8, 3), dtype=np.uint8)
+    green[..., 1] = 200
+    Image.fromarray(green, mode="RGB").save(path)
+    mode, size, means, spread = _stats(path)
+    assert mode == "RGB" and size == (8, 8)
+    assert means[1] > means[0] and means[1] > means[2]
+    assert spread > 0.7
+
+
+def test_png_manifest_reverses_to_grayscale_B_input_and_coloured_A_target(tmp_path: Path):
+    a_path = tmp_path / "train_A" / "tile.png"
+    b_path = tmp_path / "train_B" / "tile.png"
+    row = pair_row("tile", "train", a_path, b_path, tmp_path, "B", "test source")
+    assert row["input_side"] == "B" and row["target_side"] == "A"
+    assert row["sar_vv_path"] == "train_B/tile.png"
+    assert row["sar_vh_path"] == "train_B/tile.png"
+    assert row["optical_path"] == "train_A/tile.png"
 
 
 def test_dual_pol_preprocessing_keeps_two_bands_distinct():
@@ -172,8 +214,8 @@ def test_png_a_b_split_folders_make_manifest_and_pairs(tmp_path: Path):
         (root / f"{split}_A").mkdir(parents=True)
         (root / f"{split}_B").mkdir(parents=True)
         name = "ROIs1868_summer_s000147_p000612.png"
-        Image.fromarray(np.tile(np.arange(32, dtype=np.uint8), (24, 1))).save(root / f"{split}_A" / name)
-        Image.fromarray(np.full((24, 32, 3), [20, 120, 200], dtype=np.uint8)).save(root / f"{split}_B" / name)
+        Image.fromarray(np.full((24, 32, 3), [20, 120, 200], dtype=np.uint8)).save(root / f"{split}_A" / name)
+        Image.fromarray(np.tile(np.arange(32, dtype=np.uint8), (24, 1))).save(root / f"{split}_B" / name)
     output = tmp_path / "manifest.json"
     result = subprocess.run([
         sys.executable, "scripts/prepare_png_split_manifest.py", "--data-root", str(root),
@@ -184,6 +226,9 @@ def test_png_a_b_split_folders_make_manifest_and_pairs(tmp_path: Path):
     train = next(row for row in rows if row["split"] == "train")
     sar = normalise_sar_pair(train, size=16)
     target = optical_target(train, size=16)
+    assert train["input_side"] == "B" and train["target_side"] == "A"
+    assert Path(train["sar_vv_path"]).parent.name == "train_B"
+    assert Path(train["optical_path"]).parent.name == "train_A"
     assert sar.shape == (16, 16, 2) and np.array_equal(sar[..., 0], sar[..., 1])
     assert target.shape == (16, 16, 3) and target[8, 8, 1] == pytest.approx(120 / 255, abs=1e-5)
 
