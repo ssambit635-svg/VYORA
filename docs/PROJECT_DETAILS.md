@@ -2,7 +2,7 @@
 
 # DrishtiSAR — Project Details
 
-> **Controlling scope (21 Nov 2026):** follow the attached Voltrix deck: prepared Sentinel-1 VV/VH dual-pol GeoTIFF → paired Sentinel-2 visible target → compact 2→3 channel U-Net baseline → side-by-side review and geospatial preview export. Streamlit is the deck-aligned interface. Older single-channel assumptions in this specification are legacy text. No real paired subset or trained checkpoint is currently bundled; do not present the fallback as AI output.
+> **Specification vs current implementation:** the intended problem-statement scope is prepared Sentinel-1 VV/VH GeoTIFF → paired Sentinel-2 visible target → compact 2→3 channel model → review/export. The currently trained checkpoint is instead a grayscale paired-PNG prototype; it is not compatible with true VV/VH. React/Vite + FastAPI is the accepted primary interface; Streamlit is optional. See [PPT alignment](PPT_ALIGNMENT_AND_SELECTION_GUIDE.md) for an honest feature-by-feature status.
 
 **Project:** DrishtiSAR  
 **Tagline:** From radar texture to confidence-aware geographic interpretation.  
@@ -12,7 +12,7 @@
 
 ## 1. Project summary
 
-Vyora is a local-first geospatial visual-interpretation prototype planned to map prepared **Sentinel-1 VV/VH dual-polarization** input to an estimated Sentinel-2-style RGB layer. The current default run is a labelled development fallback: there is no trained checkpoint or paired dataset bundled yet.
+Vyora is a local-first image-to-image prototype. The trained checkpoint currently maps grayscale B-side PNG tiles to paired A-side image estimates. A separate VV/VH GeoTIFF data path exists in code, but a compatible trained checkpoint and verified geospatial evaluation are still missing.
 
 The app displays more than a colourized output. It makes three questions visible:
 
@@ -39,13 +39,13 @@ The challenge asks for deep-learning colourization that improves visual interpre
 
 ### Main differentiators
 
-| Common colourization demo | DrishtiSAR |
+| Goal in the product concept | Current implementation |
 |---|---|
-| Only produces a colourful image | Produces colour, confidence, feature likelihoods, and metrics |
-| Implies output is a real photograph | Clearly labels output as an AI estimate |
-| No evidence that structure was retained | Shows structural/edge-preservation evidence |
-| Generic satellite use case | Focuses on rapid coastal and disaster interpretation |
-| Works only on a desktop notebook | Provides a responsive app usable from phones |
+| Estimated visual interpretation | B→A paired-PNG image estimate; not verified VV/VH-to-optical |
+| Explain stability and feature outputs | Flip consistency is shown with caveat; no calibrated uncertainty or PNG-model class head |
+| Preserve structure evidence | Live structure proxy is shown but is not accuracy; paired-target metrics are in the limited evaluation report |
+| Support coastal/disaster interpretation | Intended use only; no measured impact or decision-support validation |
+| Phone-accessible local UI | Responsive React UI exists; real phone/LAN rehearsal remains pending |
 
 ---
 
@@ -72,9 +72,10 @@ A response analyst receives a SAR scene from a cloudy coastal region. An optical
 
 | Input | MVP support | Notes |
 |---|---|---|
-| Prepared Sentinel-1 dual-pol GeoTIFF | Target input | VV/VH order and CRS/affine metadata; physical calibration must happen upstream |
-| Paired Sentinel-2 visible target | Required for training | Must be cloud-screened, co-registered, scaled and legally reusable |
-| Synthetic grayscale preview | UI fallback only | Duplicated into two channels; not real SAR or dual-pol evidence |
+| Grayscale paired PNG | Current model input | B-side image duplicated into two model channels; source semantics are unverified |
+| Prepared Sentinel-1 dual-pol GeoTIFF | Future model input | Decode/preprocessing code exists, but current checkpoint is incompatible; calibration must happen upstream |
+| Paired Sentinel-2 visible target | Geospatial training target path | Data/licence, source pairing and a VV/VH-trained checkpoint remain unverified |
+| Synthetic grayscale preview | UI fallback only | Not real SAR, not model training/evaluation evidence |
 | Scene metadata | Optional | Scene name, source/date, polarization, location label; no user location required |
 
 ### Outputs
@@ -83,8 +84,8 @@ A response analyst receives a SAR scene from a cloudy coastal region. An optical
 |---|---|
 | Estimated RGB-style colour interpretation | Easier visual recognition of land patterns |
 | Input/output comparison slider | Helps users check that the raw SAR structure has not been hidden |
-| Water/vegetation/built-up/bare-other likelihoods | Provides a simple feature-level interpretation |
-| Confidence/uncertainty map | Identifies areas that require manual verification |
+| Palette-derived shares (legacy/development paths only) | Not learned labels; omitted for current B→A PNG checkpoint |
+| Flip-view consistency image | Visual prediction stability cue; not calibrated uncertainty or real-world certainty |
 | Structural and edge-preservation metrics | Technical evidence for model evaluation |
 | PNG and JSON export | Enables presentation/demo hand-off |
 
@@ -130,7 +131,7 @@ Responsive result view
 ## 7. ML design
 
 ### Baseline model
-A compact **U-Net/ResU-Net encoder-decoder** maps normalized, paired VV/VH tiles (2 input channels) to a three-channel Sentinel-2-style visible target. The trained checkpoint is not yet available.
+A compact **ResU-Net encoder-decoder** maps two model input channels to three output channels. The current trained checkpoint receives two identical copies of one grayscale B-side PNG channel and predicts the paired A-side image. A future VV/VH checkpoint could use the same architecture but must be trained and evaluated separately on verified paired geospatial data.
 
 This is deliberately selected over a large GAN/transformer/diffusion model because it is:
 - more likely to train stably in the available time;

@@ -19,6 +19,8 @@ def test_health_reports_honest_mode(client):
     assert body["mode"] == "development"
     assert body["is_ai_inference"] is False
     assert body["model_version"] == "dev-heuristic-v0"
+    assert body["input_representation"] == "development_preview"
+    assert "interface testing only" in body["accepted_model_input"]
     assert "not an official map" in body["disclaimer"]
 
 
@@ -44,7 +46,7 @@ def test_demo_inference_and_exports(client):
     assert abs(sum(body["feature_estimates"].values()) - 1.0) < 1e-3
     assert 0 <= body["confidence_summary"]["mean"] <= 1
     assert body["metrics"]["runtime_ms"] > 0
-    assert body["metrics"]["held_out_evaluation"] == "not_run"
+    assert body["metrics"]["held_out_evaluation"] == "not_evaluated"
 
     for key in ("input", "colour", "confidence"):
         image = client.get(body["urls"][key])

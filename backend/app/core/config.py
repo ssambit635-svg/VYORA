@@ -11,7 +11,7 @@ DATA_DIR = REPO_ROOT / "data"
 DEMO_DIR = DATA_DIR / "demo_samples"
 MANIFEST_PATH = DATA_DIR / "manifests" / "demo_scenes.json"
 CHECKPOINT_PATH = Path(
-    os.getenv("VYORA_CHECKPOINT", str(BACKEND_DIR / "checkpoints" / "vyora_resunet.pt"))
+    os.getenv("VYORA_CHECKPOINT", str(BACKEND_DIR / "checkpoints" / "vyora_resunet_b_to_a.pt"))
 )
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 

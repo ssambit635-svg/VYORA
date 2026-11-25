@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "backend"))
 from app.core.config import DEMO_DIR, MANIFEST_PATH
 from app.core.geospatial import decode_sar, geotiff_bytes, preprocess_pair
-from app.ml.model_runner import get_runner, runner_status
+from app.ml.model_runner import get_runner, incompatible_input_message, runner_status
 
 st.set_page_config(page_title="Vyora | SAR interpretation", page_icon="🛰️", layout="wide")
 st.markdown("""
@@ -36,14 +36,23 @@ st.title("VYORA · SAR → optical-style visual interpretation")
 st.caption("HK26-PS-19 · dual-polarization VV/VH workflow · local inference · not a warning product")
 status = runner_status()
 if status.is_ai_inference:
-    st.success(f"Model checkpoint active: {status.model_version}")
+    st.success(f"Model checkpoint active: {status.model_version} · input representation: {status.input_representation}")
 else:
     st.warning("DEVELOPMENT MODE — no trained AI checkpoint is loaded. The output is a rule-based interface demonstration, not model inference.")
 
+is_png_checkpoint = (
+    status.is_ai_inference
+    and status.input_representation.startswith("grayscale_")
+    and status.input_representation.endswith("_PNG_duplicated")
+)
 with MANIFEST_PATH.open(encoding="utf-8") as handle:
     scenes = json.load(handle).get("scenes", [])
 labels = {scene["name"]: scene for scene in scenes}
-source_kind = st.radio("Input source", ["Bundled demo preview", "Upload SAR raster"], horizontal=True)
+if is_png_checkpoint:
+    source_kind = "Upload grayscale PNG tile"
+    st.info("This checkpoint is trained on grayscale paired PNG tiles. It cannot accept a true VV/VH GeoTIFF.")
+else:
+    source_kind = st.radio("Input source", ["Bundled demo preview", "Upload SAR raster"], horizontal=True)
 source_path = None
 upload = None
 if source_kind == "Bundled demo preview":
@@ -52,7 +61,10 @@ if source_kind == "Bundled demo preview":
     source_path = DEMO_DIR / scene["filename"]
     st.info(scene["data_note"])
 else:
-    upload = st.file_uploader("Upload a calibrated, co-registered Sentinel-1 GeoTIFF (VV band 1, VH band 2). PNG/JPEG previews are also accepted but are not true dual-pol.", type=["tif", "tiff", "png", "jpg", "jpeg"])
+    if is_png_checkpoint:
+        upload = st.file_uploader("Upload a grayscale PNG tile from your paired dataset.", type=["png"])
+    else:
+        upload = st.file_uploader("Upload a calibrated, co-registered Sentinel-1 GeoTIFF (VV band 1, VH band 2). PNG/JPEG are previews only, not true dual-pol.", type=["tif", "tiff", "png", "jpg", "jpeg"])
 
 if st.button("Interpret scene", type="primary", width="stretch"):
     try:
@@ -65,18 +77,24 @@ if st.button("Interpret scene", type="primary", width="stretch"):
         decoded = decode_sar(payload, filename)
         tile = preprocess_pair(decoded.channels)
         runner = get_runner()
-        if getattr(runner, "input_representation", "") == "grayscale_A_PNG_duplicated" and decoded.input_kind == "geotiff-vv-vh":
-            raise ValueError("This prototype checkpoint was trained on grayscale A-side PNG tiles. Use an A-side PNG; it is not compatible with dual-band GeoTIFF input.")
+        incompatibility = incompatible_input_message(runner, decoded.input_kind, filename)
+        if incompatibility:
+            raise ValueError(incompatibility)
         output = runner.infer(tile)
         mean_band = tile.mean(axis=-1)
-        # VV=red, VH=green, mean=blue; diagnostic radar composite, not optical RGB.
+        # VV=red, VH=green, mean=blue; a diagnostic radar composite, not optical RGB.
         radar_rgb = np.clip(np.stack((tile[..., 0], tile[..., 1], mean_band), axis=-1) * 255, 0, 255).astype(np.uint8)
         before = Image.fromarray(radar_rgb, mode="RGB")
+        input_caption = (
+            "Grayscale PNG input (duplicated model channels)"
+            if decoded.input_kind == "single-channel-preview-duplicated"
+            else "VV/VH radar composite (VV red, VH green; not optical RGB)"
+        )
         after = Image.fromarray(output.colour, mode="RGB")
         confidence = Image.fromarray(output.confidence_image, mode="RGB")
         st.session_state["vyora_result"] = {
             "before": before, "after": after, "confidence": confidence,
-            "output": output, "decoded": decoded,
+            "output": output, "decoded": decoded, "input_caption": input_caption,
         }
     except Exception as error:
         st.error(f"Could not interpret this input: {error}")
@@ -86,7 +104,7 @@ if result:
     output, decoded = result["output"], result["decoded"]
     st.markdown('<div class="vyora-note">Estimated appearance only. SAR measures returned microwave energy; output is not recovered true colour, a calibrated analytical raster, or an official map.</div>', unsafe_allow_html=True)
     left, right = st.columns(2)
-    left.image(result["before"], caption="Original VV/VH radar composite (VV red, VH green; not optical RGB)", width="stretch")
+    left.image(result["before"], caption=result["input_caption"], width="stretch")
     right.image(result["after"], caption="Estimated optical-style RGB layer", width="stretch")
     show_confidence = st.toggle("Show flip-view consistency layer (not calibrated uncertainty)")
     if show_confidence:
@@ -95,10 +113,13 @@ if result:
     m1.metric("Model", output.model_version)
     m2.metric("Inference mode", "AI checkpoint" if output.is_ai_inference else "Development fallback")
     m3.metric("Input", decoded.input_kind)
-    st.subheader("Palette-derived scene shares (not learned classes or validated segmentation)")
-    cols = st.columns(4)
-    for col, (name, share) in zip(cols, output.feature_estimates.items()):
-        col.metric(name.replace("_", " ").title(), f"{share * 100:.1f}%")
+    if output.feature_estimates:
+        st.subheader("Palette-derived scene shares (not learned classes or validated segmentation)")
+        cols = st.columns(4)
+        for col, (name, share) in zip(cols, output.feature_estimates.items()):
+            col.metric(name.replace("_", " ").title(), f"{share * 100:.1f}%")
+    else:
+        st.info("This checkpoint predicts image pixels only; no water/vegetation/building classifier is included.")
     png = io.BytesIO()
     result["after"].save(png, format="PNG")
     st.download_button("Download estimated PNG", png.getvalue(), "vyora-estimated.png", "image/png")
@@ -115,4 +136,10 @@ if result:
     }, indent=2), "vyora-result.json", "application/json")
 
 st.divider()
-st.caption("Training: SEN12MS paired Sentinel-1 VV/VH and Sentinel-2 visible targets · U-Net baseline · region-separated holdout. No paired dataset or trained checkpoint is bundled yet; see docs/DATA_CARD.md and docs/EVALUATION.md.")
+st.caption(
+    "Current checkpoint: grayscale paired PNG prototype; see docs/EVALUATION.md. "
+    "It is not a verified Sentinel-1 VV/VH → Sentinel-2 model. GeoTIFF support in the pipeline requires a separately trained VV/VH checkpoint."
+    if is_png_checkpoint else
+    "GeoTIFF inputs must already be calibrated, terrain-corrected and co-registered. "
+    "The current backend performs robust normalization only; it does not perform physical SAR calibration."
+)

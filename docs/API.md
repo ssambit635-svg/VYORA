@@ -1,16 +1,16 @@
-# Vyora API (alternate React/FastAPI interface)
+# Vyora API
 
-Base URL: `http://localhost:8000` (or laptop LAN address); interactive docs at `/docs`. The deck-aligned Streamlit UI runs separately on port 8501 and calls the same local inference functions directly.
+Base URL: `http://localhost:8000` (or laptop LAN address); interactive docs at `/docs`. React/Vite is the accepted primary UI. Streamlit is optional and uses the same model/input checks.
 
-Uploads/results are held in memory only, with short-lived result IDs. No user images are written to disk.
+Uploads are processed in memory. Generated result assets are held in a bounded, expiring in-memory cache; user input files are not written to disk.
 
 ## `GET /api/health`
 
-Reports `mode`, `model_version`, `is_ai_inference`, checkpoint availability and disclaimer. A development fallback is never reported as trained AI.
+Returns runtime mode, checkpoint/version, input representation, accepted model input, PyTorch availability, checkpoint availability, and disclaimer. Always check this endpoint before describing an inference as AI. A development fallback is never reported as trained AI.
 
 ## `GET /api/demo-scenes`
 
-Lists the four bundled **synthetic**, non-georeferenced illustrations and their explicit `data_note`.
+Lists four bundled **synthetic**, non-georeferenced illustrations and their explicit `data_note`. They are interface previews, not model-training/evaluation data.
 
 ## `POST /api/infer`
 
@@ -18,56 +18,63 @@ Send either one multipart `file` or form field `demo_scene_id` (not both).
 
 | Input | Rules |
 |---|---|
-| Two-band GeoTIFF | Up to 50 MB; band 1=VV, band 2=VH; CRS/transform retained. Must already be calibrated, terrain-corrected and co-registered. |
-| PNG/JPEG preview | Up to 10 MB; single-channel data is duplicated across the model channels and is not true dual-pol input. |
-| Demo scene | ID returned by `/api/demo-scenes`; synthetic only. |
+| Current B→A PNG checkpoint | Accepts a grayscale paired PNG tile; the single channel is duplicated to two model channels. A GeoTIFF is rejected because this checkpoint was not trained on VV/VH. |
+| VV/VH-trained checkpoint | Accepts a two-band GeoTIFF (band 1=VV, band 2=VH); rejects a single-channel PNG/JPEG preview as not genuine dual-pol. |
+| Development fallback | Accepts previews for interface testing, clearly labelled as non-AI. |
+| GeoTIFF limits | Up to 50 MB; must already be radiometrically calibrated, terrain-corrected and co-registered. CRS/transform are preserved in preview export. |
+| PNG/JPEG limits | Up to 10 MB. PNG has no geospatial coordinates. |
+
+For the current checkpoint, use a grayscale PNG upload. The synthetic gallery is not shown as a trained-scene substitute in the React PNG-prototype mode.
 
 ```bash
-curl -F 'file=@prepared-vv-vh.tif;type=image/tiff' http://localhost:8000/api/infer
-curl -F 'demo_scene_id=coastal-water' http://localhost:8000/api/infer
+curl -F 'file=@paired-grayscale-tile.png;type=image/png' http://localhost:8000/api/infer
 ```
 
-The response includes mode/version, input kind, channels and preprocessing, source CRS/transform when present, feature-share caveat, consistency-method caveat, runtime and result URLs. Values depend on the actual request; no held-out metrics are inserted.
+The response includes model/mode/input details, consistency-method caveat, runtime, evaluation status for the exact checkpoint, and result URLs. Class shares are empty for the current PNG model because it has no classification head. A legacy or development path may expose explicitly labelled palette/rule-derived shares; these are not validated classes.
+
+Example response fields (illustrative only):
 
 ```json
 {
-  "mode": "development",
-  "model_version": "dev-heuristic-v0",
-  "is_ai_inference": false,
+  "mode": "model",
+  "model_version": "resunet-paired-png-prototype-v0.2-b-to-a",
+  "is_ai_inference": true,
   "input": {
     "channels": 2,
-    "polarizations": ["VV", "VH"],
-    "input_kind": "geotiff-vv-vh",
-    "crs": "<input CRS>",
-    "preprocessing": "per-band robust normalization and 256x256 resize"
+    "polarizations": ["duplicated grayscale preview", "not genuine dual-pol"],
+    "input_kind": "single-channel-preview-duplicated",
+    "crs": null,
+    "preprocessing": "independent robust normalization, despeckle and resize to 256x256"
   },
-  "outputs": {
-    "colour": "3-channel estimated visual interpretation PNG",
-    "geotiff": "extent/CRS-preserving 256x256 preview, only for GeoTIFF input"
+  "feature_estimates": {},
+  "confidence_method": "original-vs-flipped output consistency; not calibrated uncertainty",
+  "metrics": {
+    "held_out_evaluation": "documented_200_tile_subset_geographic_independence_unverified"
   },
-  "metrics": {"held_out_evaluation": "not_run"},
   "urls": {
     "input": "/api/results/<id>/input",
     "colour": "/api/results/<id>/image",
     "confidence": "/api/results/<id>/confidence",
-    "geotiff": "/api/results/<id>/geotiff",
-    "json": "/api/results/<id>/export"
+    "json": "/api/results/<id>/export",
+    "geotiff": null
   }
 }
 ```
+
+The subset status means a report exists for this exact prototype. It does not mean this request's tile was evaluated or that geographic independence was established. Other checkpoints return `not_evaluated_for_this_checkpoint`.
 
 ## Result endpoints
 
 - `GET /api/results/{id}/input` — input preview PNG.
 - `GET /api/results/{id}/image` — estimated RGB-style PNG.
-- `GET /api/results/{id}/confidence` — consistency-visualization PNG (not calibrated uncertainty).
-- `GET /api/results/{id}/geotiff` — CRS/extent-preserving preview if source was georeferenced; `404` otherwise.
-- `GET /api/results/{id}/export` — JSON response summary.
+- `GET /api/results/{id}/confidence` — consistency-visualization PNG, not calibrated uncertainty.
+- `GET /api/results/{id}/geotiff` — CRS/extent-preserving preview if source was georeferenced and checkpoint/input contract allowed inference; otherwise 404.
+- `GET /api/results/{id}/export` — JSON result summary.
 
-Result assets expire after the configured in-memory retention interval. Unknown/expired IDs return 404.
+Unknown/expired IDs return 404.
 
 ## Safety notes
 
-- GeoTIFF output is resized to the 256×256 model canvas. It is not a full-resolution scientific product.
-- Rasterio handles file I/O; this API does not perform Sentinel-1 radiometric calibration or terrain correction.
-- Restrict the service to a trusted LAN; no authentication/rate-limiting is configured for public exposure.
+- GeoTIFF output is resized to the 256×256 model canvas. It is not a full-resolution analytical raster.
+- Rasterio handles file I/O; the service does not perform physical Sentinel-1 calibration or terrain correction.
+- Restrict the service to a trusted LAN; public authentication and rate limiting are not configured.

@@ -1,24 +1,30 @@
-# Implementation decisions and deck alignment
+# Implementation decisions and current scope
 
-The team's attached Voltrix PDF is treated as the controlling technical scope. Product name remains **Vyora**; the earlier specs use DrishtiSAR as a working name.
+The repository contains two distinct inference paths. Do not merge their claims:
 
-| Decision | Reason | Result / limit |
+1. **Current demonstrated checkpoint:** grayscale B-side PNG → A-side PNG estimate (`vyora_resunet_b_to_a.pt`). The source semantics are not independently verified.
+2. **Geospatial research path:** two-channel VV/VH GeoTIFF → three-channel optical-style target. The manifest, data loader, model architecture, normalization, evaluation and CRS-aware preview code exist, but this path has no compatible trained checkpoint or verified real-data evaluation in the repository.
+
+| Decision | Why | Current state / limitation |
 |---|---|---|
-| Align model input to VV + VH, output to RGB-style estimate | Deck's core claim and system diagram are explicitly dual-polarization | `ml/src/model.py` is now a 2-input/3-output ResU-Net generator; no checkpoint is supplied |
-| Add Rasterio VV/VH GeoTIFF read and GeoTIFF preview export | Deck requires geospatial input/output and CRS/transform preservation | Implemented and round-trip tested on a synthetic raster; full analytical/resolution export is not claimed |
-| Require pre-calibrated, terrain-corrected, co-registered SAR input | Rasterio/NumPy percentile scaling is not physical Sentinel-1 calibration | Current code normalizes bands; it does not run SNAP/GDAL calibration/terrain correction |
-| Add Streamlit interface | Presentation names Streamlit | `streamlit_app.py` / `scripts/run_streamlit.sh` is deck-aligned; React + FastAPI stays optional, not the live pitch path |
-| Dataset manifest accepts explicit VV, VH and optical target paths | Avoid silently treating grayscale as dual-pol and enable paired geospatial training | Scene-group split and TIFF grid checks added; real SEN12MS subset still absent |
-| Remove unsupervised confidence/class model heads | No uncertainty labels or land-cover masks exist in paired image-only data | Confidence is TTA output agreement only; feature cards are fixed palette shares, neither a calibrated probability nor learned segmentation |
-| Keep synthetic scenes only as clearly labelled UI fallbacks | No real licensed imagery bundled | Synthetic gallery is never training/evaluation evidence |
-| Keep test/metrics language conservative | No real held-out evaluation | `docs/EVALUATION.md` remains Not run; smoke data must not be quoted |
+| Train a compact ResU-Net | Small, interpretable image-to-image baseline for CPU demo | Trained for 5 CPU epochs on 1,000 paired PNG train tiles; 200 validation tiles; see evaluation report |
+| Keep input representation in checkpoint metadata | Prevent accidental use of PNG-trained weights on true VV/VH inputs | API and Streamlit now validate the model/input contract; PNG checkpoint rejects GeoTIFF inference |
+| Keep checkpoint metadata portable | Avoid publishing private workstation paths in future checkpoints | Trainer now stores repo-relative manifest references or only an external manifest basename |
+| Avoid synthetic/heuristic class claims | No supervised water/vegetation/building masks for the current checkpoint | PNG checkpoint returns no class shares; UI says pixel prediction only |
+| Use flip TTA only as a consistency cue | No calibration labels or uncertainty evaluation exist | UI/export explicitly describe prediction stability, not calibrated uncertainty |
+| Retain separate GeoTIFF pipeline | Required for a future genuine VV/VH model | Code-level I/O and synthetic round-trip tests exist; current PNG checkpoint cannot run on this input |
+| React/Vite + FastAPI is accepted interface | Matches current user choice | Streamlit remains an optional alternate, not the primary live UI |
+| Keep uploads in memory | Privacy by default | API stores generated results in a bounded, expiring in-memory cache; does not write uploads to disk |
 
-## Highest-priority remaining work
+## Evidence now available
 
-1. Fill the PDF's visible Team ID placeholder and PS code (`HK26-PS-19`) using the official event registration.
-2. Obtain and document lawful access to paired SEN12MS or other aligned SAR/optical samples; record product level, band order/scale, target scale, acquisition/cloud metadata, source and licence.
-3. Validate upstream radiometric calibration/terrain correction and co-registration. This repository does not perform those geophysical steps.
-4. Build scene-group splits, train an actual checkpoint, and run evaluation on held-out regions. Commit only small lawful artifacts; otherwise keep raw data/checkpoint outside Git and document where judges can access them.
-5. Rehearse the Streamlit interface and a prepared GeoTIFF on the actual laptop/phone network.
+- Corrected B→A training and 200-tile subset evaluation are documented in `docs/EVALUATION.md`.
+- Automated backend/ML tests and frontend production build run in the repository; see `docs/TEST_CHECKLIST.md`.
+- Real phone/offline rehearsal, source licence/provenance, and geographic split independence remain manual/unverified.
 
-See `docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md` for slide mapping, judge keywords, risks and presentation priorities.
+## Remaining work outside a code-only completion
+
+- Verify exact archive source, terms, sensor semantics, and the geographic independence of the PNG folders.
+- If the final deliverable must be true VV/VH→optical, acquire/verify paired geospatial data and train/evaluate a **separate** VV/VH checkpoint. Do not repurpose this PNG checkpoint.
+- If the presentation lists land-cover probabilities, provide labeled masks and train/evaluate a classification head or revise the claim; the current image-to-image model cannot produce valid classes.
+- Verify actual event Team ID/member details and rehearse the app on the presentation laptop and phone.

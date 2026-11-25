@@ -1,96 +1,85 @@
-# Installation and local demo
+# Install and run Vyora
 
-## Presentation-aligned Streamlit UI
+The current checked-in model is a **B→A paired-PNG prototype**. It is not a trained VV/VH GeoTIFF model. The 34 GB source archive and its manifest remain on the user's machine, not in Git.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-ui.txt
-bash scripts/run_streamlit.sh
-```
-
-Open `http://localhost:8501` or use the laptop's LAN IP on the same Wi-Fi. This is the UI named in the attached deck. For a trained checkpoint, install compatible PyTorch CPU/GPU wheels separately; no checkpoint is bundled.
-
-
-## Requirements
+## Prerequisites
 
 - Python 3.10 or 3.11
 - Node.js 18+ and npm
-- A laptop and (optional) a phone on the same Wi-Fi
+- For AI inference: a compatible PyTorch CPU/CUDA build. The API requirements file does not install PyTorch automatically.
 
-## First-time setup
+## First-time setup (PowerShell)
 
-```bash
-# from the repository root
-python3 -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
+From the repository root:
 
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend/requirements.txt
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 cd frontend
 npm install
-npm run build                        # creates frontend/dist, served by FastAPI
 cd ..
 ```
 
-Regenerate the synthetic demo scenes only if needed:
+If PyTorch is already installed in the environment used for the previous training, do not reinstall it. For GPU PyTorch, follow the official install selector for the target machine instead of the CPU command above.
 
-```bash
-.venv/bin/python scripts/generate_demo_scenes.py
+## Run the accepted React + FastAPI UI
+
+Open PowerShell window 1 at the repository root:
+
+```powershell
+$env:VYORA_CHECKPOINT = "$PWD\backend\checkpoints\vyora_resunet_b_to_a.pt"
+$env:VYORA_MODE = "auto"
+python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 ```
 
-## Run
+Open PowerShell window 2:
 
-```bash
-bash scripts/run_local.sh
+```powershell
+cd frontend
+npm run dev -- --host 0.0.0.0
 ```
 
-The script binds Uvicorn to `0.0.0.0:8000`, prints the laptop LAN IP and opens a single app at:
+Open the Vite URL, usually `http://localhost:5173`. Keep both windows open. Check `http://localhost:8000/api/health` before the demo: it must say `mode: model`, `is_ai_inference: true`, and the B→A prototype model version. If it reports development mode, do not describe that request as AI inference.
 
-- Laptop: `http://localhost:8000`
-- Phone on same Wi-Fi: `http://<printed-LAN-IP>:8000`
-- API docs: `http://localhost:8000/docs`
+The current checkpoint accepts grayscale PNG input only. A PNG result has no CRS/map coordinates. The server intentionally rejects a VV/VH GeoTIFF when this checkpoint is loaded.
 
-Stop with `Ctrl+C`.
+## Optional built, one-port app
 
-## Frontend development mode (optional)
+After building the frontend once:
 
-For hot reload, run the API and Vite separately:
-
-```bash
-# terminal 1
-VYORA_MODE=development .venv/bin/python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
-
-# terminal 2
-cd frontend && npm run dev
+```powershell
+cd frontend
+npm run build
+cd ..
+$env:VYORA_CHECKPOINT = "$PWD\backend\checkpoints\vyora_resunet_b_to_a.pt"
+python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 ```
 
-Vite proxies `/api/*` to `http://127.0.0.1:8000`. This mode is for development; use the built frontend for the final phone demo.
+Then use `http://localhost:8000`. For a phone on the same Wi-Fi, use the laptop's LAN IP instead of `localhost`, allow the private-network firewall prompt, and keep both devices on that Wi-Fi.
 
-## Inference modes
+## Optional Streamlit interface
 
-| Setting | Behaviour |
-|---|---|
-| `VYORA_MODE=development` (default when no checkpoint) | Deterministic, labelled development fallback; no AI claim |
-| `VYORA_MODE=auto` | Uses `backend/checkpoints/vyora_resunet.pt` if the file and PyTorch exist, else development mode |
-| `VYORA_MODE=model` | Requires a valid checkpoint and PyTorch; fails over to development mode with a logged reason if unavailable |
+`streamlit_app.py` is retained as an alternate interface. React/Vite remains the accepted primary UI. With Streamlit installed:
 
-Check `GET /api/health` to confirm `mode`, `model_version` and `is_ai_inference`.
-
-## Adding a trained model (later)
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m ml.src.train --config ml/configs/train_default.json
+```powershell
+$env:VYORA_CHECKPOINT = "$PWD\backend\checkpoints\vyora_resunet_b_to_a.pt"
+python -m streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501
 ```
 
-Then restart the server; `auto` mode will load the checkpoint. Do not claim accuracy until `python -m ml.src.evaluate` has been run on a held-out manifest.
+The current PNG checkpoint will only offer grayscale PNG input. A VV/VH-trained checkpoint is required before selecting a GeoTIFF input for AI inference.
+
+## Checkpoint selection
+
+If `VYORA_CHECKPOINT` is unset, the application defaults to `backend/checkpoints/vyora_resunet_b_to_a.pt`. Set the variable explicitly as shown above to make the demo choice unambiguous. To inspect the legacy A→B model, set it to `backend/checkpoints/vyora_resunet.pt` deliberately; do not use that checkpoint as colourization evidence. `VYORA_MODE=development` forces the hand-authored fallback; it is not trained AI. `VYORA_MODE=auto` loads a compatible checkpoint when PyTorch is available.
 
 ## Troubleshooting
 
-| Symptom | Fix |
+| Symptom | Check |
 |---|---|
-| `/api/health` unreachable | Start the backend; check port 8000 is free |
-| Phone shows blank page | Use the LAN IP, not `localhost`; check firewall; confirm frontend was built |
-| Gallery images missing | Run the demo scene generator; check `data/manifests/demo_scenes.json` |
-| `npm run build` type errors | Ensure `npm install` completed and Node 18+ is used |
-| Mode says development unexpectedly | No checkpoint / no torch / `VYORA_MODE=development`; check health `runner_note` |
+| Health says `development` | Confirm the active Python environment has PyTorch, `VYORA_CHECKPOINT` points to the B→A file, and `VYORA_MODE` is not `development`; restart after changing environment variables |
+| GeoTIFF rejected | Expected for the PNG checkpoint. A separately trained VV/VH checkpoint is needed |
+| Vite cannot reach the API | Keep FastAPI running on port 8000; the Vite proxy uses the same machine's backend in local dev |
+| Phone cannot open app | Use the laptop LAN IP, not `localhost`; check same Wi-Fi and firewall |
+| Missing sample gallery | Bundled gallery scenes are synthetic UI previews, not real satellite evidence |
