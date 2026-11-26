@@ -33,6 +33,17 @@ class DecodedSAR:
     transform: tuple[float, ...] | None = None
     input_kind: str = "single-channel-preview"
 
+    @property
+    def has_georeferencing(self) -> bool:
+        """True only when a CRS and non-identity affine transform are present."""
+        identity = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+        return bool(
+            self.profile is not None
+            and self.crs
+            and self.transform is not None
+            and not np.allclose(self.transform, identity)
+        )
+
 
 def decode_sar(payload: bytes, filename: str, content_type: str | None = None) -> DecodedSAR:
     """Decode a two-band VV/VH GeoTIFF or a labelled single-channel preview.

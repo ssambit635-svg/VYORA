@@ -41,7 +41,7 @@ export interface InferenceResult {
   model_version: string
   is_ai_inference: boolean
   source: { type: 'demo' | 'upload'; name: string; filename: string; scene_id: string | null }
-  input: { width: number; height: number; channels: number; preprocessing: string; input_kind?: string; polarizations?: string[]; crs?: string | null; transform?: number[] | null }
+  input: { width: number; height: number; channels: number; preprocessing: string; input_kind?: string; polarizations?: string[]; distinct_channels?: boolean; channel_stats?: Array<{ label: string; mean: number; p02: number; p50: number; p98: number; histogram: number[] }>; crs?: string | null; transform?: number[] | null }
   feature_estimates: Record<string, number>
   feature_method: string
   confidence_summary: ConfidenceSummary
@@ -54,5 +54,5 @@ export interface InferenceResult {
   }
   disclaimer: string
   privacy: string
-  urls: { input: string; colour: string; confidence: string; json: string; geotiff?: string | null }
+  urls: { input: string; channel_1: string; channel_2: string; colour: string; confidence: string; json: string; geotiff?: string | null }
 }

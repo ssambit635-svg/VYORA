@@ -35,6 +35,23 @@ def _png(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+def _channel_preview_png(channel: np.ndarray) -> bytes:
+    image = Image.fromarray(np.clip(channel * 255.0, 0, 255).astype(np.uint8), mode="L")
+    return _png(image)
+
+
+def _channel_stats(channel: np.ndarray) -> dict:
+    values = np.asarray(channel, dtype=np.float32)
+    histogram, _ = np.histogram(values, bins=16, range=(0.0, 1.0))
+    return {
+        "mean": round(float(values.mean()), 5),
+        "p02": round(float(np.percentile(values, 2)), 5),
+        "p50": round(float(np.percentile(values, 50)), 5),
+        "p98": round(float(np.percentile(values, 98)), 5),
+        "histogram": histogram.astype(int).tolist(),
+    }
+
+
 def _load_manifest() -> list[dict]:
     if not MANIFEST_PATH.is_file():
         return []
@@ -88,7 +105,7 @@ def health() -> dict:
             if status.input_representation.startswith("grayscale_")
             else "two distinct VV/VH channels"
             if status.is_ai_inference
-            else "image previews for labelled interface testing only; no trained model input contract"
+            else "two-band VV/VH GeoTIFF or PNG/JPEG preview for labelled interface testing only; no trained model input contract"
         ),
         "checkpoint_available": status.checkpoint_available,
         "torch_available": status.torch_available,
@@ -170,11 +187,21 @@ async def infer(
     # VV=red, VH=green, mean=blue; this is a radar diagnostic composite, not optical RGB.
     dualpol_preview = np.clip(np.stack([tile[..., 0], tile[..., 1], preview_tile], axis=-1) * 255, 0, 255).astype(np.uint8)
     input_png = _png(Image.fromarray(dualpol_preview, mode="RGB"))
+    channel_1_png = _channel_preview_png(tile[..., 0])
+    channel_2_png = _channel_preview_png(tile[..., 1])
     colour_png = _png(Image.fromarray(output.colour, mode="RGB"))
     confidence_png = _png(Image.fromarray(output.confidence_image, mode="RGB"))
     conf_summary = confidence_summary(output.confidence)
+    distinct_dual_pol = decoded.input_kind == "geotiff-vv-vh" and not np.allclose(
+        tile[..., 0], tile[..., 1], rtol=0.0, atol=1e-6
+    )
+    channel_labels = ["VV", "VH"] if distinct_dual_pol else ["channel 1", "channel 2"]
+    channel_stats = [
+        {"label": label, **_channel_stats(tile[..., index])}
+        for index, label in enumerate(channel_labels)
+    ]
     structural_proxy = round(edge_agreement(preview_tile, output.colour), 4)
-    geo_png = geotiff_bytes(output.colour, decoded.profile) if decoded.profile else None
+    geo_png = geotiff_bytes(output.colour, decoded.profile) if decoded.has_georeferencing else None
 
     summary = {
         "result_id": "",  # filled after the id is created
@@ -190,12 +217,19 @@ async def infer(
         },
         "input": {
             "width": decoded.source_width, "height": decoded.source_height, "channels": 2,
-            "polarizations": ["VV", "VH"] if decoded.input_kind == "geotiff-vv-vh" else ["duplicated grayscale preview", "not genuine dual-pol"],
+            "polarizations": ["VV", "VH"] if distinct_dual_pol else ["channel 1", "channel 2"],
+            "distinct_channels": distinct_dual_pol,
             "input_kind": decoded.input_kind,
+            "channel_stats": channel_stats,
             "crs": decoded.crs, "transform": decoded.transform,
-            "preprocessing": "independent 2nd-98th percentile normalization per VV/VH band, 3x3 median filter, resize to 256x256",
-            "processing_note": "GeoTIFF must already be radiometrically calibrated, terrain-corrected and co-registered; this service only normalizes."
-                if decoded.profile else "Preview channels are duplicated for interface testing; not genuine VV/VH input.",
+            "preprocessing": "independent 2nd-98th percentile normalization per channel, 3x3 median filter, resize to 256x256",
+            "processing_note": (
+                "GeoTIFF must already be radiometrically calibrated, terrain-corrected and co-registered; this service only normalizes."
+                if decoded.has_georeferencing else
+                "No usable CRS/affine georeferencing detected; this is image-only preview input. The service does not calibrate, terrain-correct or geocode raw Sentinel-1 measurements."
+                if decoded.profile else
+                "Preview channels are duplicated for interface testing; not genuine VV/VH input."
+            ),
         },
         "outputs": {"colour": "3-channel estimated interpretation PNG", "geotiff": "extent/CRS-preserving RGB preview" if geo_png else None},
         "feature_estimates": output.feature_estimates,
@@ -214,6 +248,8 @@ async def infer(
     result_id = _store(
         {
             "input_png": input_png,
+            "channel_1_png": channel_1_png,
+            "channel_2_png": channel_2_png,
             "colour_png": colour_png,
             "confidence_png": confidence_png,
             "geotiff": geo_png,
@@ -224,6 +260,8 @@ async def infer(
     _results[result_id]["summary"] = summary
     summary["urls"] = {
         "input": f"/api/results/{result_id}/input",
+        "channel_1": f"/api/results/{result_id}/channel/1",
+        "channel_2": f"/api/results/{result_id}/channel/2",
         "colour": f"/api/results/{result_id}/image",
         "confidence": f"/api/results/{result_id}/confidence",
         "json": f"/api/results/{result_id}/export",
@@ -231,6 +269,14 @@ async def infer(
     }
     _results[result_id]["summary"] = summary
     return summary
+
+
+@router.get("/results/{result_id}/channel/{channel_index}")
+def result_channel(result_id: str, channel_index: int) -> Response:
+    if channel_index not in (1, 2):
+        raise HTTPException(status_code=404, detail="Channel must be 1 or 2.")
+    payload = _get_result(result_id)[f"channel_{channel_index}_png"]
+    return Response(payload, media_type="image/png")
 
 
 @router.get("/results/{result_id}/image")

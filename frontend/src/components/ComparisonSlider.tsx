@@ -57,7 +57,7 @@ export function ComparisonSlider({
       <img
         className="compare-img"
         src={inputUrl}
-        alt={inputLabel.includes('PNG') ? 'Uploaded grayscale PNG tile' : 'VV/VH radar diagnostic composite (synthetic grayscale for demo scenes)'}
+        alt={inputLabel.includes('VV/VH') ? 'SAR diagnostic composite, with separate VV and VH bands when the source provides them' : 'Input preview without verified distinct VV and VH channels'}
         style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
       />
       <div className="compare-divider" style={{ left: `${position}%` }} aria-hidden="true">
