@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { InferenceResult } from '../types'
 import { ComparisonSlider } from './ComparisonSlider'
 import { FeatureCards } from './FeatureCards'
+import { SARInspectionTools } from './SARInspectionTools'
 
 interface Props {
   result: InferenceResult
@@ -61,7 +62,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
               showConfidence={showConfidence}
               position={position}
               onPosition={setPosition}
-              inputLabel={isPngPrototype ? 'GRAYSCALE PNG' : 'VV/VH INPUT'}
+              inputLabel={result.input.distinct_channels ? 'VV/VH INPUT' : result.input.input_kind?.startsWith('single-channel') ? 'GRAYSCALE PREVIEW' : 'BAND INPUT'}
               outputLabel={isPngPrototype ? 'MODEL ESTIMATE' : 'INTERPRETATION'}
             />
             <div className="compare-foot">
@@ -73,6 +74,8 @@ export function ResultWorkspace({ result, onReset }: Props) {
               <span className="muted small">Slider works with touch, mouse and arrow keys.</span>
             </div>
           </div>
+
+          <SARInspectionTools result={result} />
 
           {isPngPrototype ? (
             <div className="panel prototype-note">

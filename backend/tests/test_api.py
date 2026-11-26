@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import rasterio
+from affine import Affine
 from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 from PIL import Image
@@ -47,8 +48,11 @@ def test_demo_inference_and_exports(client):
     assert 0 <= body["confidence_summary"]["mean"] <= 1
     assert body["metrics"]["runtime_ms"] > 0
     assert body["metrics"]["held_out_evaluation"] == "not_evaluated"
+    assert len(body["input"]["channel_stats"]) == 2
+    assert body["urls"]["channel_1"].endswith("/channel/1")
+    assert body["urls"]["channel_2"].endswith("/channel/2")
 
-    for key in ("input", "colour", "confidence"):
+    for key in ("input", "channel_1", "channel_2", "colour", "confidence"):
         image = client.get(body["urls"][key])
         assert image.status_code == 200
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
@@ -80,12 +84,56 @@ def test_dual_polarization_geotiff_round_trip(client):
     assert result["input"]["polarizations"] == ["VV", "VH"]
     assert result["input"]["crs"] == "EPSG:32645"
     assert result["input"]["width"] == 24 and result["input"]["height"] == 32
+    vv_preview = client.get(result["urls"]["channel_1"])
+    vh_preview = client.get(result["urls"]["channel_2"])
+    assert vv_preview.status_code == vh_preview.status_code == 200
+    assert vv_preview.content != vh_preview.content
+    assert result["input"]["channel_stats"][0]["label"] == "VV"
+    assert result["input"]["channel_stats"][1]["label"] == "VH"
     geotiff = client.get(result["urls"]["geotiff"])
     assert geotiff.status_code == 200
     with MemoryFile(geotiff.content) as mem:
         with mem.open() as ds:
             assert ds.count == 3 and ds.crs.to_string() == "EPSG:32645"
             assert ds.bounds == rasterio.coords.BoundingBox(500000.0, 2199680.0, 500240.0, 2200000.0)
+
+
+def test_identical_geotiff_bands_are_not_labelled_vv_vh(client):
+    profile = {"driver": "GTiff", "height": 12, "width": 12, "count": 2, "dtype": "uint16"}
+    band = np.arange(12 * 12, dtype=np.uint16).reshape(12, 12)
+    with MemoryFile() as mem:
+        with mem.open(**profile) as ds:
+            ds.write(np.stack([band, band]))
+        payload = mem.read()
+
+    response = client.post("/api/infer", files={"file": ("duplicated-bands.tif", payload, "image/tiff")})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["input"]["distinct_channels"] is False
+    assert [channel["label"] for channel in result["input"]["channel_stats"]] == ["channel 1", "channel 2"]
+    assert client.get(result["urls"]["channel_1"]).content == client.get(result["urls"]["channel_2"]).content
+
+
+def test_unreferenced_dual_pol_preview_does_not_offer_fake_geotiff_export(client):
+    profile = {
+        "driver": "GTiff", "height": 16, "width": 12, "count": 2,
+        "dtype": "uint16", "transform": Affine.identity(),
+    }
+    with MemoryFile() as mem:
+        with mem.open(**profile) as ds:
+            ds.write(np.stack([
+                np.arange(16 * 12, dtype=np.uint16).reshape(16, 12),
+                np.arange(16 * 12, dtype=np.uint16).reshape(16, 12)[::-1],
+            ]))
+        payload = mem.read()
+
+    response = client.post("/api/infer", files={"file": ("unreferenced-pair.tif", payload, "image/tiff")})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["input"]["crs"] is None
+    assert result["urls"]["geotiff"] is None
+    assert result["outputs"]["geotiff"] is None
+    assert "No usable CRS/affine georeferencing" in result["input"]["processing_note"]
 
 
 def test_deterministic_preprocessing_and_result(client):
@@ -96,6 +144,9 @@ def test_deterministic_preprocessing_and_result(client):
     file = ("sar.png", buffer.getvalue(), "image/png")
     a = client.post("/api/infer", files={"file": file}).json()
     b = client.post("/api/infer", files={"file": file}).json()
+    assert a["input"]["input_kind"] == "single-channel-preview-duplicated"
+    assert [channel["label"] for channel in a["input"]["channel_stats"]] == ["channel 1", "channel 2"]
+    assert client.get(a["urls"]["channel_1"]).content == client.get(a["urls"]["channel_2"]).content
     assert a["feature_estimates"] == b["feature_estimates"]
     assert a["metrics"]["input_output_edge_agreement_proxy"] == b["metrics"]["input_output_edge_agreement_proxy"]
     assert payload  # keep the grayscale construction meaningful in the test
