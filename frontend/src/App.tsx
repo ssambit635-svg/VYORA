@@ -10,6 +10,7 @@ import { ProcessingState } from './components/ProcessingState'
 import { ResultWorkspace } from './components/ResultWorkspace'
 import { SceneLibraryPage } from './components/SceneLibraryPage'
 import { ScenePicker } from './components/ScenePicker'
+import { SiteFooter } from './components/SiteFooter'
 import { UploadDropzone } from './components/UploadDropzone'
 import type { DemoScene, Health, InferenceResult } from './types'
 
@@ -133,7 +134,7 @@ export default function App() {
         </main>}
       </>}
 
-      {screen === 'workspace' && <footer className="workspace-footer"><span>VYORA<span className="wordmark-period">.</span></span><span>Local research prototype · Not an official map or warning product</span></footer>}
+      {screen === 'workspace' && <SiteFooter workspace runnerLabel={health ? health.mode.toUpperCase() : 'API CHECKING'} onNavigate={setPage} />}
     </div>
   )
 }

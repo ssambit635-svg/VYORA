@@ -28,7 +28,9 @@ export function MethodSection({ health }: Props) {
     {
       icon: Gauge,
       title: 'Consistency cue',
-      text: 'Original-versus-flipped prediction agreement is a stability measure, not calibrated uncertainty or a hazard probability.',
+      text: isModel
+        ? 'Original-versus-flipped prediction agreement is a stability measure, not calibrated uncertainty or a hazard probability.'
+        : 'The development runner uses a deterministic rule-based consistency cue. It is not model uncertainty or a hazard probability.',
     },
     {
       icon: Layers,

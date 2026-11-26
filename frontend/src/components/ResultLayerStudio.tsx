@@ -56,7 +56,7 @@ export function ResultLayerStudio({ result }: Props) {
           </div>
         )}
       </div>
-      <div className="layer-limits"><Info size={14} /><p><strong>Not available in this model:</strong> learned feature-segmentation masks and attention/saliency maps. We show only API-returned images and clearly labelled derived summaries.</p></div>
+      <div className="layer-limits"><Info size={14} /><p>Only API-returned image views and clearly labelled, non-spatial summaries are shown.</p></div>
     </section>
   )
 }

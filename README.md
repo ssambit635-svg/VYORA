@@ -47,6 +47,8 @@ These are screenshots of the running local web app. The bundled scene thumbnails
 
 ## What the app can do
 
+- Rotate the purple vector globe by dragging or using the arrow keys; the satellite-shaped orbit markers are illustrative, not live positions.
+- Open NASA Eyes for an external view of real Earth-observing satellite positions, or the NOAA GOES animation reference. Neither is connected to Vyora's local model runs.
 - Browse four bundled synthetic scenes or provide a supported local image.
 - Compare the original input, estimated colour output and runner-specific consistency view.
 - Review source dimensions, observed API runtime, CRS when present, and API-returned palette/rule-derived shares when present.
@@ -179,6 +181,7 @@ The band indexes and scale above are examples and require verification against t
 | Scientific scope | [ML status](docs/ML_STATUS.md) · [Model card](docs/MODEL_CARD.md) · [Data card](docs/DATA_CARD.md) · [Evaluation](docs/EVALUATION.md) |
 | Development | [Test checklist](docs/TEST_CHECKLIST.md) · [Project details](docs/PROJECT_DETAILS.md) · [Implementation decisions](docs/IMPLEMENTATION_DECISIONS.md) |
 | Presentation | [PPT alignment and selection guide](docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md) |
+| Visual assets | [Interactive globe data, attribution and external references](docs/ASSETS.md) |
 
 ## Development checks
 

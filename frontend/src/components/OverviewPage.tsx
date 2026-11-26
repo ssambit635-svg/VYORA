@@ -52,9 +52,8 @@ export function OverviewPage({ health, scenes, result, onNavigate, onChooseScene
       </section>
 
       <section className="metric-row" aria-label="Measured session values">
-        <article className="metric-card"><span><Database size={15} /> DEMO SCENES</span><strong>{scenes.length}</strong><small>Available from this API session</small></article>
         <article className="metric-card"><span><Clock3 size={15} /> LAST RUN TIME</span><strong>{result ? `${result.metrics.runtime_ms} ms` : '—'}</strong><small>{result ? 'Observed for the current result' : 'Run a scene to record this value'}</small></article>
-        <article className="metric-card"><span><Gauge size={15} /> FLIP CONSISTENCY</span><strong>{result ? `${(result.confidence_summary.mean * 100).toFixed(0)}%` : '—'}</strong><small>{result ? 'Stability cue, not calibrated confidence' : 'Not measured in this session'}</small></article>
+        <article className="metric-card"><span><Gauge size={15} /> CONSISTENCY CUE</span><strong>{result ? `${(result.confidence_summary.mean * 100).toFixed(0)}%` : '—'}</strong><small>{result ? 'Stability cue, not calibrated confidence' : 'Not measured in this session'}</small></article>
         <article className="metric-card"><span><Radar size={15} /> STRUCTURE PROXY</span><strong>{result ? `${(result.metrics.input_output_edge_agreement_proxy * 100).toFixed(0)}%` : '—'}</strong><small>{result ? 'Image proxy, not accuracy' : 'Not measured in this session'}</small></article>
       </section>
 

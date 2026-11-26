@@ -25,7 +25,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
         <div>
           <span className="step-tag">03 / RESULT</span>
           <h2 id="results-title">Interpretation workspace</h2>
-          <p className="muted">{result.source.name} · {result.input.width}×{result.input.height} tile · {result.model_version}</p>
+          <p className="muted">{result.source.name} · {result.model_version}</p>
         </div>
         <button className="ghost-btn" onClick={onReset}><RotateCcw size={15} /> New scene</button>
       </div>
@@ -55,7 +55,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
               <label className="switch">
                 <input type="checkbox" checked={showConfidence} onChange={(e) => setShowConfidence(e.target.checked)} />
                 <span className="switch-track" aria-hidden="true"><span /></span>
-                <span className="switch-label">Consistency layer</span>
+                <span className="switch-label">Overlay consistency</span>
               </label>
             </div>
             <ComparisonSlider
@@ -70,9 +70,9 @@ export function ResultWorkspace({ result, onReset }: Props) {
             />
             <div className="compare-foot">
               <div className={`legend ${showConfidence ? 'visible' : ''}`}>
-                <span><i className="swatch low" /> Lower agreement &lt;45% · {conf.low_pct}%</span>
-                <span><i className="swatch mid" /> Moderate · {conf.medium_pct}%</span>
-                <span><i className="swatch high" /> Higher agreement ≥70% · {conf.high_pct}%</span>
+                <span><i className="swatch low" /> Lower consistency &lt;45% · {conf.low_pct}%</span>
+                <span><i className="swatch mid" /> Moderate consistency · {conf.medium_pct}%</span>
+                <span><i className="swatch high" /> Higher consistency ≥70% · {conf.high_pct}%</span>
               </div>
               <span className="muted small">Slider works with touch, mouse and arrow keys.</span>
             </div>
@@ -80,21 +80,15 @@ export function ResultWorkspace({ result, onReset }: Props) {
 
           <SARInspectionTools result={result} />
 
-          {isPngPrototype && <div className="panel prototype-note">
-            <h3>What this prototype predicts</h3>
-            <p>It predicts image pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
-          </div>}
         </div>
 
         <aside className="result-side">
           <IntelligenceSummary result={result} />
           <div className="panel side-panel">
-            <h3>Session evidence</h3>
+            <h3>Run diagnostics</h3>
             <div className="stat-list">
-              <div><span>Observed runtime</span><strong>{result.metrics.runtime_ms} ms</strong></div>
               <div><span>Structure proxy</span><strong>{(result.metrics.input_output_edge_agreement_proxy * 100).toFixed(0)}%</strong></div>
               <div><span>Mean consistency</span><strong>{(conf.mean * 100).toFixed(0)}%</strong></div>
-              <div><span>Model version</span><strong>{result.model_version}</strong></div>
               <div>
                 <span>Held-out evaluation</span>
                 <strong className="warn-text">
@@ -139,7 +133,7 @@ export function ResultWorkspace({ result, onReset }: Props) {
 function confidenceText(result: InferenceResult): string {
   const method = result.confidence_method.toLowerCase()
   if (method.includes('hand-authored')) {
-    return 'Confidence here means agreement of fixed geographic rules under a mirror check. It is not model uncertainty.'
+    return 'This consistency score comes from hand-authored backscatter/texture rules. It is not learned-model uncertainty.'
   }
   return 'Consistency is agreement between original and flipped-view model predictions. It is not calibrated uncertainty and does not measure real-world certainty.'
 }

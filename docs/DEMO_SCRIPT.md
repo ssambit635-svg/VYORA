@@ -1,24 +1,48 @@
-# Vyora hackathon demo script (2–3 minutes)
+# Vyora: judge demo script
 
-## Before the room
+A simple 2–3 minute walkthrough. **Read the runner status from the app before you speak:** if it says Development, describe a rule-based demo; say “checkpoint” only when the API reports checkpoint inference.
 
-- Start FastAPI with `VYORA_CHECKPOINT=backend/checkpoints/vyora_resunet_b_to_a.pt` and run the React/Vite frontend.
-- Confirm the UI reports model version `resunet-paired-png-prototype-v0.2-b-to-a`.
-- Keep a verified grayscale B-side PNG ready. Start with the consistency layer off so judges see the model estimate, not the green agreement overlay.
-- Have `docs/EVALUATION.md` open to the 200-tile subset and its caveats.
+## Before the demo
 
-## Talk track
+1. Start FastAPI and the React/Vite app; open the local workspace.
+2. Check the **Model Status** card. For checkpoint inference, explicitly select `backend/checkpoints/vyora_resunet_b_to_a.pt`; otherwise present the run as Development mode.
+3. Use one of the four bundled scenes. They are synthetic interface examples—not satellite images. If using an upload, verify that its format matches the active runner's input contract.
 
-**Problem (20 sec):** “Radar-like grayscale imagery can be difficult to scan visually. Vyora is a local prototype exploring whether paired image learning can provide a colour-style visual aid.”
+## Talk track, point by point
 
-**Method (30 sec):** “This checkpoint takes a grayscale B-side PNG, duplicates it into two model channels, and predicts pixels resembling its paired A-side image. The folder statistics suggest this direction, but sensor identity and source semantics are not independently verified.”
+1. **Show the landing page.** Drag the purple Earth or use arrow keys, then reset it. “The vector globe is an interaction, not a map or live data. Its small spacecraft and orbit paths are illustrative. NASA Eyes opens separately for real satellite positions.”
+2. **Explain the workflow.** Point to Choose a scene → Compare views → Note and export. “The diagram shows the local review flow; it does not imply an external data feed.”
+3. **Show the workspace.** Point out the four synthetic examples and the API-reported runner mode/version. “The status is live from the local API; this demo does not use production login.”
+4. **Run one scene.** “I will show the output this runner returned. If the banner says Development, these are hand-authored rules—not trained AI inference.”
+5. **Compare source and estimate.** Drag the before/after slider—or focus it and use the arrow keys. “This is an estimated image, not recovered true colour or ground truth.”
+6. **Switch the result layers.** Show Original input, Estimated colour, Consistency and Feature summary. “Consistency is a stability cue, not confidence. Shares appear only when returned by the API and are not validated land-cover detections. The app marks feature masks and attention maps unavailable.”
+7. **Inspect the input.** Open the channel lens and histogram. “Separate VV/VH is claimed only when the API verifies distinct bands; a grayscale preview is not a VV/VH pair.”
+8. **Review a region.** Drag a crop in Region Zoom Compare; the same image-space region is shown across input, output and consistency. Add a short human note and export the review JSON. “These notes are user annotations in normalized image coordinates, not geographic labels.”
+9. **Show the run report and exports.** Point out source dimensions, input type, observed processing time, CRS and palette/rule shares only when returned. Export the output PNG or result JSON; a CRS/extent-preserving GeoTIFF preview is conditional on compatible georeferenced input.
+10. **Close with the limits and footer.** Point out the runner status and external NASA/NOAA references. “Those links open outside Vyora; they are not connected to a run. Vyora does not detect floods, cyclones or land-cover classes, and it is not an official warning system. The source data's sensor semantics and geographic independence still need verification.”
 
-**Demo (45 sec):** Upload a grayscale B-side tile, run inference, and move the slider between input and estimate. Toggle the consistency layer briefly to show prediction stability under a flip; explain that stability is not confidence or accuracy. Download the PNG and JSON if asked.
+## Feature check: what is in the app
 
-**Evidence (30 sec):** “On 200 of 4,576 supplied test tiles, the model had MAE 0.096 and SSIM 0.671, compared with a simple pseudocolour baseline at MAE 0.354 and SSIM 0.248. The model remains under-coloured: average prediction RGB spread is 0.038 versus 0.131 in the target. Folder-split geographic independence was not verified.”
+| Feature | Status | Judge-friendly description |
+|---|---|---|
+| Landing page and demo entry | Present | Explains the workflow and keeps demo access local; no production authentication is claimed. |
+| Interactive purple Earth | Present | Canvas-rendered vector land dots; drag, arrow-key rotation and reset. Orbit and spacecraft illustrations are not live positions or analysis data. |
+| Workflow diagram | Present | Shows input → estimate → human review at a glance. |
+| NASA Eyes / NOAA GOES references | External links | NASA Eyes is an external satellite tracker; NOAA is an external real imagery animation. Neither is embedded or connected to Vyora runs. |
+| Shared public/workspace footer | Present | Includes workspace navigation, runner label, prototype scope and external references. |
+| Overview and scene library | Present | Four bundled synthetic scenes plus API-reported runner status. |
+| Image upload | Present, input-dependent | PNG/JPEG preview or two-band GeoTIFF in supported modes; file contract is shown in the UI. |
+| Image estimate and before/after slider | Present | Compare the source with the output returned by the active runner. |
+| Result layer switcher | Present | Original, estimated colour, consistency, and API-returned feature summary. |
+| Feature-mask and attention layers | Not produced | Clearly labelled unavailable; no mask or saliency output is invented. |
+| Input-channel lens and histogram | Present, data-dependent | Inspect channel previews and available API statistics; identical preview channels are called out. |
+| Region zoom comparison | Present | Compare the same selected image-space crop across views. |
+| Human review notes | Present | Add notes to a marked normalized image region and export JSON. |
+| Intelligence summary | Present, API-data-dependent | Dimensions and runtime; CRS and palette/rule shares only when returned. |
+| Exports | Present, input-dependent | PNG and result JSON; GeoTIFF preview only when the API can preserve georeferencing. |
+| Method, limits and runner status | Present | Describes the active method and research-prototype limits. |
+| Hazard detection or official alerts | Not present | Do not describe Vyora as a flood, cyclone or emergency-warning detector. |
 
-**Limits (20 sec):** “This is not true-colour recovery, a map, land-cover classification or an emergency warning. PNGs have no map coordinates, and we need verified source semantics, geographic holdout and expert validation.”
+## If judges ask about model results
 
-## If something fails
-
-Present the app as a pipeline demonstration only; do not present screenshots as live inference. Do not hide muted outputs by enabling the consistency overlay, and do not call any displayed percentage accuracy.
+The documented corrected B→A checkpoint was evaluated on a 200-tile subset and outperformed a simple palette baseline on paired-pixel metrics. Its average colour spread remains much lower than the target's, and geographic independence/source semantics were not independently verified. See [Evaluation](EVALUATION.md) for the exact metrics and caveats. These results do not establish true-colour recovery or real-world hazard performance.
