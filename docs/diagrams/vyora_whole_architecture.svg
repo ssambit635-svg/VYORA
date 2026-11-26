@@ -38,10 +38,10 @@
 <!-- Data preparation strip -->
 <text x="80" y="184" class="section">01 · SOURCE DATA &amp; TRAINING INPUT</text>
 <rect x="80" y="204" width="690" height="166" rx="16" class="card"/>
-<text x="108" y="241" class="box-title">Paired source imagery</text>
-<text x="108" y="274" class="body">Copernicus Sentinel-1 SAR · B-side</text>
-<text x="108" y="302" class="body">Copernicus Sentinel-2 optical · A-side reference</text>
-<text x="108" y="340" class="small">A/B are dataset-side labels, not satellite names.</text>
+<text x="108" y="241" class="box-title">Paired PNG folders · audited sample</text>
+<text x="108" y="274" class="body">B-side: grayscale in sampled images</text>
+<text x="108" y="302" class="body">A-side: colour-bearing paired reference</text>
+<text x="108" y="340" class="small">Sensor provenance and A/B semantics are unverified.</text>
 <path d="M785 287 H840" class="line-cyan"/>
 <rect x="860" y="204" width="690" height="166" rx="16" class="card"/>
 <text x="888" y="241" class="box-title">Prepared 256 × 256 PNG tile pair</text>
