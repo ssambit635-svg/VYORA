@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1740" viewBox="0 0 2400 1740" role="img" aria-labelledby="title desc">
+<title id="title">Vyora whole-system and ResU-Net architecture</title>
+<desc id="desc">Actual paired-PNG prototype training path, compact ResU-Net encoder-decoder with skip connections, and inference and review workflow. Not a disaster detection model.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#a78bfa"/></marker>
+  <marker id="arrow-cyan" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4cd8ff"/></marker>
+  <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#687184"/></marker>
+  <style>
+    text { font-family: Inter, Manrope, Arial, sans-serif; fill: #f4f6fa; }
+    .title { font-size: 48px; font-weight: 700; letter-spacing: -1.5px; }
+    .subtitle { font-size: 20px; fill: #a3abba; }
+    .section { font-size: 15px; font-weight: 700; letter-spacing: 2px; fill: #bcaaf1; }
+    .box-title { font-size: 18px; font-weight: 650; }
+    .body { font-size: 15px; fill: #b8bfcc; }
+    .small { font-size: 13px; fill: #929aaa; }
+    .tiny { font-size: 11px; fill: #929aaa; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 14px; fill: #d9dce4; }
+    .dim { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 14px; fill: #c5b8eb; }
+    .card { fill: #0d1018; stroke: #272d3c; stroke-width: 2; }
+    .card-raised { fill: #141824; stroke: #343b4b; stroke-width: 2; }
+    .enc { fill: #101821; stroke: #34748a; stroke-width: 2; }
+    .dec { fill: #171523; stroke: #7561a5; stroke-width: 2; }
+    .out { fill: #161a17; stroke: #48866d; stroke-width: 2; }
+    .line { fill: none; stroke: #a78bfa; stroke-width: 3; marker-end: url(#arrow); }
+    .line-cyan { fill: none; stroke: #4cd8ff; stroke-width: 3; marker-end: url(#arrow-cyan); }
+    .line-muted { fill: none; stroke: #687184; stroke-width: 2; marker-end: url(#arrow-muted); }
+    .skip { fill: none; stroke: #4cd8ff; stroke-width: 2.5; stroke-dasharray: 9 8; marker-end: url(#arrow-cyan); opacity: .92; }
+  </style>
+</defs>
+<rect width="2400" height="1740" fill="#05060a"/>
+
+<!-- Header -->
+<text x="80" y="86" class="title">VYORA <tspan fill="#a78bfa">/</tspan> WHOLE ARCHITECTURE</text>
+<text x="82" y="126" class="subtitle">Current paired-PNG image-to-image prototype · data path, ResU-Net and review application</text>
+<rect x="1935" y="54" width="385" height="48" rx="24" fill="#141824" stroke="#343b4b" stroke-width="1.5"/>
+<text x="2127" y="84" text-anchor="middle" class="small" fill="#e8b45b">NOT A FLOOD / CYCLONE DETECTOR</text>
+
+<!-- Data preparation strip -->
+<text x="80" y="184" class="section">01 · SOURCE DATA &amp; TRAINING INPUT</text>
+<rect x="80" y="204" width="690" height="166" rx="16" class="card"/>
+<text x="108" y="241" class="box-title">Paired source imagery</text>
+<text x="108" y="274" class="body">Copernicus Sentinel-1 SAR · B-side</text>
+<text x="108" y="302" class="body">Copernicus Sentinel-2 optical · A-side reference</text>
+<text x="108" y="340" class="small">A/B are dataset-side labels, not satellite names.</text>
+<path d="M785 287 H840" class="line-cyan"/>
+<rect x="860" y="204" width="690" height="166" rx="16" class="card"/>
+<text x="888" y="241" class="box-title">Prepared 256 × 256 PNG tile pair</text>
+<text x="888" y="274" class="body">B-side grayscale → duplicated into 2 input channels</text>
+<text x="888" y="302" class="body">A-side RGB-style tile → 3-channel training target</text>
+<text x="888" y="340" class="small">This checkpoint does not consume raw SAFE or distinct VV/VH.</text>
+<path d="M1565 287 H1620" class="line-cyan"/>
+<rect x="1640" y="204" width="680" height="166" rx="16" class="card"/>
+<text x="1668" y="241" class="box-title">Documented prototype training run</text>
+<text x="1668" y="274" class="body">CPU · batch size 2 · 1,000 train / 200 validation tiles</text>
+<text x="1668" y="302" class="body">5 epochs · best validation checkpoint retained</text>
+<text x="1668" y="340" class="small">The 35 GB archive is a source pool; it was not loaded all at once.</text>
+
+<!-- Network panel -->
+<rect x="80" y="400" width="2240" height="690" rx="20" class="card"/>
+<text x="112" y="442" class="section">02 · PYTORCH RESU-NET · BASE CHANNELS = 24</text>
+<text x="112" y="474" class="small">Residual U-Net encoder–decoder · each residual block: Conv 3×3 → BN → ReLU → Conv 3×3 → BN, then add input + ReLU</text>
+
+<!-- Input -->
+<rect x="112" y="510" width="200" height="116" rx="14" class="card-raised"/>
+<text x="212" y="548" text-anchor="middle" class="box-title">B input tile</text>
+<text x="212" y="580" text-anchor="middle" class="dim">2 × 256 × 256</text>
+<text x="212" y="606" text-anchor="middle" class="tiny">grayscale copied twice</text>
+<path d="M313 568 H350" class="line-cyan"/>
+
+<!-- Encoder stack -->
+<text x="380" y="510" class="section" fill="#4cd8ff">ENCODER · DOWNSAMPLE</text>
+<rect x="360" y="530" width="270" height="76" rx="12" class="enc"/>
+<text x="382" y="560" class="box-title">Stem / s0</text><text x="382" y="586" class="dim">24 × 256 × 256</text>
+<path d="M495 607 V635" class="line-cyan"/>
+<rect x="360" y="640" width="270" height="76" rx="12" class="enc"/>
+<text x="382" y="670" class="box-title">Down 1 / s1</text><text x="382" y="696" class="dim">48 × 128 × 128</text>
+<path d="M495 717 V745" class="line-cyan"/>
+<rect x="360" y="750" width="270" height="76" rx="12" class="enc"/>
+<text x="382" y="780" class="box-title">Down 2 / s2</text><text x="382" y="806" class="dim">96 × 64 × 64</text>
+<path d="M495 827 V855" class="line-cyan"/>
+<rect x="360" y="860" width="270" height="76" rx="12" class="enc"/>
+<text x="382" y="890" class="box-title">Down 3 / s3</text><text x="382" y="916" class="dim">192 × 32 × 32</text>
+<path d="M495 937 V965" class="line-cyan"/>
+<rect x="360" y="970" width="270" height="76" rx="12" class="enc"/>
+<text x="382" y="1000" class="box-title">Down 4 / s4</text><text x="382" y="1026" class="dim">192 × 16 × 16</text>
+
+<!-- Bottleneck -->
+<path d="M632 1008 H720" class="line-cyan"/>
+<rect x="730" y="970" width="270" height="76" rx="12" class="card-raised"/>
+<text x="865" y="1000" text-anchor="middle" class="box-title">Bottleneck</text><text x="865" y="1026" text-anchor="middle" class="dim">Residual · 192 × 16 × 16</text>
+
+<!-- Decoder -->
+<text x="1165" y="510" class="section" fill="#bcaaf1">DECODER · UPSAMPLE + SKIP CONCAT</text>
+<rect x="1160" y="530" width="310" height="76" rx="12" class="dec"/>
+<text x="1184" y="560" class="box-title">Up 4</text><text x="1184" y="586" class="dim">24 × 256 × 256</text>
+<path d="M1315 639 V610" class="line"/>
+<rect x="1160" y="640" width="310" height="76" rx="12" class="dec"/>
+<text x="1184" y="670" class="box-title">Up 3</text><text x="1184" y="696" class="dim">48 × 128 × 128</text>
+<path d="M1315 749 V720" class="line"/>
+<rect x="1160" y="750" width="310" height="76" rx="12" class="dec"/>
+<text x="1184" y="780" class="box-title">Up 2</text><text x="1184" y="806" class="dim">96 × 64 × 64</text>
+<path d="M1315 859 V830" class="line"/>
+<rect x="1160" y="860" width="310" height="76" rx="12" class="dec"/>
+<text x="1184" y="890" class="box-title">Up 1</text><text x="1184" y="916" class="dim">192 × 32 × 32</text>
+<path d="M1002 1008 C1070 1008 1070 898 1158 898" class="line"/>
+<text x="1035" y="979" class="tiny" fill="#bcaaf1">concat(z, s4)</text>
+
+<!-- Skip connections -->
+<path d="M632 568 H1156" class="skip"/>
+<path d="M632 678 H1156" class="skip"/>
+<path d="M632 788 H1156" class="skip"/>
+<path d="M632 898 H1156" class="skip"/>
+<text x="875" y="557" text-anchor="middle" class="tiny" fill="#4cd8ff">s0</text>
+<text x="875" y="667" text-anchor="middle" class="tiny" fill="#4cd8ff">s1</text>
+<text x="875" y="777" text-anchor="middle" class="tiny" fill="#4cd8ff">s2</text>
+<text x="875" y="887" text-anchor="middle" class="tiny" fill="#4cd8ff">s3</text>
+
+<!-- Output -->
+<path d="M1472 568 H1535" class="line"/>
+<rect x="1545" y="530" width="270" height="76" rx="12" class="card-raised"/>
+<text x="1680" y="560" text-anchor="middle" class="box-title">RGB head</text><text x="1680" y="586" text-anchor="middle" class="dim">1×1 Conv + sigmoid</text>
+<path d="M1817 568 H1875" class="line"/>
+<rect x="1885" y="510" width="390" height="116" rx="14" class="out"/>
+<text x="2080" y="548" text-anchor="middle" class="box-title">Estimated image</text>
+<text x="2080" y="580" text-anchor="middle" class="dim">3 × 256 × 256</text>
+<text x="2080" y="606" text-anchor="middle" class="tiny">pixel estimate · not true-colour recovery</text>
+
+<!-- Decoder implementation note -->
+<rect x="1545" y="665" width="730" height="185" rx="14" class="card-raised"/>
+<text x="1572" y="701" class="box-title">What each decoder stage does</text>
+<text x="1572" y="735" class="body">1. Concatenate current features with the matching encoder features.</text>
+<text x="1572" y="765" class="body">2. Transposed convolution upsamples ×2; resize to the skip tensor shape.</text>
+<text x="1572" y="795" class="body">3. Concatenate the next encoder skip, then Conv + residual refinement.</text>
+<text x="1572" y="829" class="small">Dashed cyan lines show encoder-to-decoder skip connections.</text>
+
+<!-- No extra heads -->
+<rect x="1545" y="880" width="730" height="145" rx="14" fill="#17130f" stroke="#6e5935" stroke-width="2"/>
+<text x="1572" y="918" class="box-title" fill="#e8b45b">No hazard/classification heads</text>
+<text x="1572" y="951" class="body">No flood, cyclone, water-class, or calibrated-uncertainty output head.</text>
+<text x="1572" y="981" class="small">Flip agreement is a stability cue computed outside the RGB head.</text>
+
+<!-- Training / loss row -->
+<text x="80" y="1140" class="section">03 · TRAINING LOOP (OFFLINE)</text>
+<rect x="80" y="1160" width="630" height="185" rx="16" class="card"/>
+<text x="108" y="1199" class="box-title">Paired PNG batches</text>
+<text x="108" y="1234" class="body">Input: B-side grayscale, duplicated to 2 channels</text>
+<text x="108" y="1264" class="body">Target: A-side RGB-style tile (3 channels)</text>
+<text x="108" y="1310" class="small">Tile reader loads batches; archive stays on disk.</text>
+<path d="M725 1252 H785" class="line-muted"/>
+<rect x="805" y="1160" width="680" height="185" rx="16" class="card"/>
+<text x="833" y="1199" class="box-title">Reconstruction + structure losses</text>
+<text x="833" y="1234" class="body">L1 pixel loss + 0.2 × (1 − SSIM) + 0.1 × edge loss</text>
+<text x="833" y="1264" class="body">Compare predicted RGB tile with paired A-side target</text>
+<text x="833" y="1310" class="small">These losses train image similarity, not hazard labels.</text>
+<path d="M1500 1252 H1560" class="line-muted"/>
+<rect x="1580" y="1160" width="740" height="185" rx="16" class="card"/>
+<text x="1608" y="1199" class="box-title">Optimizer, validation &amp; checkpoint</text>
+<text x="1608" y="1234" class="body">AdamW updates weights · validation selects the best checkpoint</text>
+<text x="1608" y="1264" class="body">Documented run: CPU · 1,000 train · 200 validation · 5 epochs</text>
+<text x="1608" y="1310" class="small">No pretrained parent is asserted by the repo documentation.</text>
+
+<!-- Runtime and product -->
+<text x="80" y="1410" class="section">04 · INFERENCE &amp; USER WORKFLOW</text>
+<rect x="80" y="1430" width="440" height="205" rx="16" class="card"/>
+<text x="108" y="1468" class="box-title">Input + API preprocessing</text>
+<text x="108" y="1502" class="body">Choose a scene or upload supported imagery</text>
+<text x="108" y="1532" class="body">Validate → normalize → resize to 256 × 256</text>
+<text x="108" y="1595" class="small">PNG has no CRS; GeoTIFF metadata is conditional.</text>
+<path d="M535 1532 H590" class="line-muted"/>
+<rect x="610" y="1430" width="440" height="205" rx="16" class="card"/>
+<text x="638" y="1468" class="box-title">Explicit runner selection</text>
+<text x="638" y="1502" class="body">Compatible checkpoint → ResU-Net inference</text>
+<text x="638" y="1532" class="body">Otherwise → labelled development renderer</text>
+<text x="638" y="1595" class="small">UI shows mode and version; no silent AI claim.</text>
+<path d="M1065 1532 H1120" class="line-muted"/>
+<rect x="1140" y="1430" width="760" height="205" rx="16" class="card"/>
+<text x="1168" y="1468" class="box-title">Review workspace</text>
+<text x="1168" y="1502" class="body">Before/after slider · SAR Channel Lens + histogram</text>
+<text x="1168" y="1532" class="body">Region zoom compare · human review notes → JSON</text>
+<text x="1168" y="1562" class="body">Flip consistency overlay · not calibrated uncertainty</text>
+<text x="1168" y="1595" class="small">Channel labels require distinct bands; notes are not model labels.</text>
+<path d="M1915 1532 H1970" class="line-muted"/>
+<rect x="1990" y="1430" width="330" height="205" rx="16" class="card"/>
+<text x="2018" y="1468" class="box-title">Exports</text>
+<text x="2018" y="1502" class="body">RGB preview PNG</text>
+<text x="2018" y="1532" class="body">Result summary JSON</text>
+<text x="2018" y="1562" class="body">GeoTIFF preview if georeferenced</text>
+<text x="2018" y="1595" class="small">Preview ≠ calibrated map.</text>
+
+<line x1="80" y1="1670" x2="2320" y2="1670" stroke="#272d3c" stroke-width="2"/>
+<text x="80" y="1705" class="small">Scope: paired-image interpretation prototype only · no validated flood/cyclone detection · image-space inspection is not geographic validation.</text>
+<text x="2320" y="1705" text-anchor="end" class="tiny">VYORA · ARCHITECTURE v1</text>
+</svg>

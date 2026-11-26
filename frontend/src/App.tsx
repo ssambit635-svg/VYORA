@@ -97,7 +97,7 @@ export default function App() {
         onSignOut={exitDemo}
       />
 
-      {screen === 'landing' && <LandingPage sceneCount={scenes.length} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
+      {screen === 'landing' && <LandingPage sceneCount={scenes.length} health={health} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
       {screen === 'access' && <DemoAccessPage onContinue={enterDemo} onBack={() => setScreen('landing')} />}
       {screen === 'workspace' && <>
         {page === 'overview' && <OverviewPage health={health} scenes={scenes} result={result} onNavigate={setPage} onChooseScene={chooseScene} />}

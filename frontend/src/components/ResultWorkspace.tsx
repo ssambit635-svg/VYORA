@@ -2,7 +2,8 @@ import { AlertTriangle, CheckCircle2, Download, FileJson, ImageDown, Layers3, Ma
 import { useState } from 'react'
 import type { InferenceResult } from '../types'
 import { ComparisonSlider } from './ComparisonSlider'
-import { FeatureCards } from './FeatureCards'
+import { IntelligenceSummary } from './IntelligenceSummary'
+import { ResultLayerStudio } from './ResultLayerStudio'
 import { SARInspectionTools } from './SARInspectionTools'
 
 interface Props {
@@ -44,6 +45,8 @@ export function ResultWorkspace({ result, onReset }: Props) {
         </div>
       </div>
 
+      <ResultLayerStudio result={result} />
+
       <div className="result-grid">
         <div className="result-main">
           <div className="compare-shell panel">
@@ -77,17 +80,14 @@ export function ResultWorkspace({ result, onReset }: Props) {
 
           <SARInspectionTools result={result} />
 
-          {isPngPrototype ? (
-            <div className="panel prototype-note">
-              <h3>What this prototype predicts</h3>
-              <p>It predicts image pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
-            </div>
-          ) : (
-            <FeatureCards estimates={result.feature_estimates} method={result.feature_method} />
-          )}
+          {isPngPrototype && <div className="panel prototype-note">
+            <h3>What this prototype predicts</h3>
+            <p>It predicts image pixels only. It does not predict water, vegetation, buildings, land-cover percentages, or calibrated uncertainty.</p>
+          </div>}
         </div>
 
         <aside className="result-side">
+          <IntelligenceSummary result={result} />
           <div className="panel side-panel">
             <h3>Session evidence</h3>
             <div className="stat-list">
