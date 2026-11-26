@@ -1,15 +1,25 @@
-import { ArrowDown, CircleAlert, Cpu, Radio, Sparkles, Wifi } from 'lucide-react'
+import { ArrowRight, CircleAlert, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { fetchHealth, fetchScenes, runInference } from './api/client'
-import { Header } from './components/Header'
+import { AppHeader } from './components/AppHeader'
+import { DemoAccessPage } from './components/DemoAccessPage'
+import { LandingPage } from './components/LandingPage'
 import { MethodSection } from './components/MethodSection'
+import { OverviewPage } from './components/OverviewPage'
 import { ProcessingState } from './components/ProcessingState'
 import { ResultWorkspace } from './components/ResultWorkspace'
+import { SceneLibraryPage } from './components/SceneLibraryPage'
 import { ScenePicker } from './components/ScenePicker'
 import { UploadDropzone } from './components/UploadDropzone'
 import type { DemoScene, Health, InferenceResult } from './types'
 
+type WorkspacePage = 'overview' | 'analyse' | 'scenes' | 'method'
+type Screen = 'landing' | 'access' | 'workspace'
+const SESSION_KEY = 'vyora-local-demo-session'
+
 export default function App() {
+  const [screen, setScreen] = useState<Screen>(() => sessionStorage.getItem(SESSION_KEY) === 'active' ? 'workspace' : 'landing')
+  const [page, setPage] = useState<WorkspacePage>('overview')
   const [health, setHealth] = useState<Health | null>(null)
   const [scenes, setScenes] = useState<DemoScene[]>([])
   const [selectedScene, setSelectedScene] = useState<string | null>(null)
@@ -18,8 +28,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const resultsRef = useRef<HTMLDivElement>(null)
-  const pngPrototype = health?.model_version.includes('paired-png-prototype') ?? false
-  const legacyPngDirection = health?.model_version.includes('paired-png-prototype-v0.1') ?? false
+  const pngPrototype = health?.input_representation.startsWith('grayscale_') ?? false
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setError('Cannot reach the local API. Start the backend before running a scene.'))
@@ -28,6 +37,30 @@ export default function App() {
       setSelectedScene((current) => current ?? items[0]?.id ?? null)
     }).catch(() => setError('Demo scenes could not be loaded.'))
   }, [])
+
+  function enterDemo() {
+    sessionStorage.setItem(SESSION_KEY, 'active')
+    setScreen('workspace')
+    setPage('overview')
+    setError('')
+  }
+
+  function exitDemo() {
+    sessionStorage.removeItem(SESSION_KEY)
+    setScreen('landing')
+    setPage('overview')
+    setResult(null)
+    setFile(null)
+    setError('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function chooseScene(sceneId: string) {
+    setSelectedScene(sceneId)
+    setFile(null)
+    setError('')
+    setPage('analyse')
+  }
 
   async function interpret() {
     if (!file && !selectedScene) {
@@ -48,93 +81,59 @@ export default function App() {
     }
   }
 
+  function showWorkflow() {
+    document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
-    <div id="top" className="app-shell">
-      <Header health={health} />
-      <main>
-        <section className="hero">
-          <div className="hero-glow" aria-hidden="true" />
-          <div className="container hero-inner">
-            <div className="hero-copy">
-              <span className="hero-eyebrow"><Radio size={14} /> HK26-PS-19 · SAR IMAGE COLORIZATION</span>
-              <h1>See the shape of<br /><span>what radar sees.</span></h1>
-              <p>{legacyPngDirection
-                ? 'The loaded v0.1 checkpoint used a reversed A/B pairing and is not a valid colourization result. The corrected B-to-A experiment needs a new checkpoint.'
-                : pngPrototype
-                  ? 'This prototype learns from paired A/B PNG tiles. It accepts a grayscale tile and estimates pixels from its paired side; the input is not separate VV/VH channels.'
-                  : 'Vyora maps paired VV/VH backscatter to an estimated optical-style view, while keeping the measured radar evidence visible.'}</p>
-              <div className="hero-actions">
-                <a className="primary-btn" href="#workspace">Try a demo scene <ArrowDown size={16} /></a>
-                <a className="text-btn" href="#method">How the model works</a>
-              </div>
-            </div>
-            <div className="hero-visual" aria-hidden="true">
-              <div className="orb">
-                <div className="orb-ring one" /><div className="orb-ring two" /><div className="orb-ring three" />
-                <div className="orb-core"><Sparkles size={30} /></div>
-              </div>
-              <div className="visual-chip chip-one"><span />RAW BACKSCATTER</div>
-              <div className="visual-chip chip-two"><span />{pngPrototype ? 'PNG PROTOTYPE' : 'FLIP CONSISTENCY'}</div>
-            </div>
-          </div>
-          <div className="container trust-row">
-            <span><Wifi size={15} /> Runs locally on a laptop</span>
-            <span><Cpu size={15} /> CPU-friendly compact model</span>
-            <span><Sparkles size={15} /> No paid APIs or subscriptions</span>
-            <span><CircleAlert size={15} /> {pngPrototype ? 'Prototype output, not ground truth' : 'Estimate, not ground truth'}</span>
-          </div>
-        </section>
+    <div className="app-shell">
+      <AppHeader
+        signedIn={screen === 'workspace'}
+        access={screen === 'access'}
+        activePage={page}
+        onNavigate={setPage}
+        onEnter={() => setScreen('access')}
+        onBack={() => setScreen('landing')}
+        onSignOut={exitDemo}
+      />
 
-        <section className="workspace container" id="workspace">
-          <div className="section-title compact">
-            <span className="eyebrow">INTERPRETATION WORKSPACE</span>
-            <h2>Choose a scene, then look closer.</h2>
-            <p>{legacyPngDirection
-              ? 'This checkpoint is legacy and should not be used to claim colourization. Rebuild the manifest with grayscale B input and colour-bearing A target, then train a new checkpoint.'
-              : pngPrototype
-                ? 'Use the grayscale PNG side from the paired dataset. The bundled demo scenes are synthetic and are not training examples.'
-                : 'Four synthetic preview scenes keep the demo reliable. For geospatial inference, upload a calibrated, co-registered two-band GeoTIFF with VV first and VH second.'}</p>
+      {screen === 'landing' && <LandingPage sceneCount={scenes.length} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
+      {screen === 'access' && <DemoAccessPage onContinue={enterDemo} onBack={() => setScreen('landing')} />}
+      {screen === 'workspace' && <>
+        {page === 'overview' && <OverviewPage health={health} scenes={scenes} result={result} onNavigate={setPage} onChooseScene={chooseScene} />}
+        {page === 'scenes' && <SceneLibraryPage scenes={scenes} onAnalyse={chooseScene} />}
+        {page === 'method' && <div className="workspace-method"><div className="workspace-page method-intro"><span className="section-kicker">METHOD & LIMITS</span><h1>Every step stays inspectable.</h1><p>Read how this prototype handles inputs, consistency cues and the boundaries of its outputs.</p></div><MethodSection health={health} /></div>}
+        {page === 'analyse' && <main className="workspace-page analysis-page">
+          <div className="page-title-row analysis-title">
+            <div><span className="section-kicker">ANALYSIS WORKSPACE</span><h1>Compare the signal with its estimate.</h1><p>Keep the source visible. Treat the output as an estimate, not ground truth or a hazard alert.</p></div>
+            {health && <span className={`analysis-mode ${health.is_ai_inference ? 'model' : ''}`}>{health.is_ai_inference ? 'CHECKPOINT INFERENCE' : 'DEVELOPMENT MODE'}</span>}
           </div>
-
-          <div className="workspace-grid">
-            <div className="input-column">
+          <div className="analysis-grid">
+            <div className="analysis-input-column">
               {!pngPrototype && <>
                 <ScenePicker scenes={scenes} selectedId={file ? null : selectedScene} onSelect={(id) => { setFile(null); setSelectedScene(id); setError('') }} disabled={loading} />
                 <div className="or-divider"><span>OR</span></div>
               </>}
-              <UploadDropzone file={file} onFile={(f) => { setFile(f); if (f) setError('') }} onError={setError} disabled={loading} pngPrototype={pngPrototype} />
+              <UploadDropzone file={file} onFile={(selected) => { setFile(selected); if (selected) setError('') }} onError={setError} disabled={loading} pngPrototype={pngPrototype} />
               {error && <div className="error-box" role="alert"><CircleAlert size={17} /><span>{error}</span></div>}
-              <button className="primary-btn interpret-btn" onClick={interpret} disabled={loading || (!file && !selectedScene)}>
-                {loading ? 'Interpreting…' : 'Interpret scene'} <ArrowDown size={16} />
+              <button className="button-primary interpret-btn" onClick={interpret} disabled={loading || (!file && !selectedScene)}>
+                {loading ? 'Interpreting…' : 'Interpret scene'} <ArrowRight size={16} />
               </button>
-              <p className="consent-note">By running a scene you acknowledge the output is an AI-estimated / rule-based interpretation, not an official map or warning product.</p>
+              <p className="form-note">Uploaded bytes are processed in memory. No map coordinates are inferred from a PNG.</p>
             </div>
-
-            <div className="output-column" ref={resultsRef}>
-              {loading ? <ProcessingState sourceName={file?.name ?? scenes.find((s) => s.id === selectedScene)?.name ?? 'Selected scene'} /> : result ? (
+            <div className="analysis-output-column" ref={resultsRef}>
+              {loading ? <ProcessingState sourceName={file?.name ?? scenes.find((scene) => scene.id === selectedScene)?.name ?? 'Selected scene'} /> : result ? (
                 <ResultWorkspace result={result} onReset={() => { setResult(null); setFile(null) }} />
-              ) : (
-                <div className="empty-state panel">
-                  <div className="empty-visual" aria-hidden="true"><span /><span /><span /></div>
-                  <h3>Your result will appear here</h3>
-                  <p>{pngPrototype
-                    ? 'Compare the grayscale PNG input with the model estimate. This prototype does not provide calibrated uncertainty, land-cover classes, or map coordinates.'
-                    : 'Compare the VV/VH radar composite with the estimated interpretation, inspect flip-view consistency, and export PNG, JSON or a GeoTIFF preview.'}</p>
-                  <div className="empty-pills"><span>Before / after slider</span><span>Consistency cue</span><span>Prototype limits</span><span>PNG + JSON export</span></div>
-                </div>
-              )}
+              ) : <div className="analysis-empty data-card">
+                <div className="empty-mark"><Upload size={20} /></div><span className="card-eyebrow">READY WHEN YOU ARE</span><h2>Your result will appear here.</h2><p>Choose a scene or upload a supported image, then run one interpretation. Results and measured values appear in this panel.</p>
+                <div className="empty-hints"><span>Before / after</span><span>Consistency cue</span><span>PNG + JSON export</span></div>
+              </div>}
             </div>
           </div>
-        </section>
+        </main>}
+      </>}
 
-        <MethodSection pngPrototype={pngPrototype} />
-      </main>
-      <footer className="site-footer">
-        <div className="container footer-inner">
-          <div><strong>VYORA<span className="brand-dot">.</span></strong><span>Confidence-aware SAR interpretation demonstrator · HK26-PS-19</span></div>
-          <span>Local-first · Open source · Decision support only</span>
-        </div>
-      </footer>
+      {screen === 'workspace' && <footer className="workspace-footer"><span>VYORA<span className="wordmark-period">.</span></span><span>Local research prototype · Not an official map or warning product</span></footer>}
     </div>
   )
 }
