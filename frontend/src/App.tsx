@@ -9,7 +9,6 @@ import { OverviewPage } from './components/OverviewPage'
 import { ProcessingState } from './components/ProcessingState'
 import { ResultWorkspace } from './components/ResultWorkspace'
 import { SceneLibraryPage } from './components/SceneLibraryPage'
-import { ScenePicker } from './components/ScenePicker'
 import { SiteFooter } from './components/SiteFooter'
 import { UploadDropzone } from './components/UploadDropzone'
 import type { DemoScene, Health, InferenceResult } from './types'
@@ -33,10 +32,7 @@ export default function App() {
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setError('Cannot reach the local API. Start the backend before running a scene.'))
-    fetchScenes().then((items) => {
-      setScenes(items)
-      setSelectedScene((current) => current ?? items[0]?.id ?? null)
-    }).catch(() => setError('Demo scenes could not be loaded.'))
+    fetchScenes().then(setScenes).catch(() => setError('Demo scenes could not be loaded.'))
   }, [])
 
   function enterDemo() {
@@ -101,7 +97,7 @@ export default function App() {
       {screen === 'landing' && <LandingPage sceneCount={scenes.length} scenes={scenes} health={health} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
       {screen === 'access' && <DemoAccessPage onContinue={enterDemo} onBack={() => setScreen('landing')} />}
       {screen === 'workspace' && <>
-        {page === 'overview' && <OverviewPage health={health} scenes={scenes} result={result} onNavigate={setPage} onChooseScene={chooseScene} />}
+        {page === 'overview' && <OverviewPage health={health} result={result} onNavigate={setPage} />}
         {page === 'scenes' && <SceneLibraryPage scenes={scenes} onAnalyse={chooseScene} />}
         {page === 'method' && <div className="workspace-method"><div className="workspace-page method-intro"><span className="section-kicker">METHOD & LIMITS</span><h1>Every step stays inspectable.</h1><p>Read how this prototype handles inputs, consistency cues and the boundaries of its outputs.</p></div><MethodSection health={health} /></div>}
         {page === 'analyse' && <main className="workspace-page analysis-page">
@@ -112,8 +108,13 @@ export default function App() {
           <div className="analysis-grid">
             <div className="analysis-input-column">
               {!pngPrototype && <>
-                <ScenePicker scenes={scenes} selectedId={file ? null : selectedScene} onSelect={(id) => { setFile(null); setSelectedScene(id); setError('') }} disabled={loading} />
-                <div className="or-divider"><span>OR</span></div>
+                <section className="selected-input-panel data-card">
+                  <span className="card-eyebrow">SCENE INPUT</span>
+                  <strong>{scenes.find((scene) => scene.id === selectedScene)?.name ?? 'No scene selected'}</strong>
+                  <p>{scenes.find((scene) => scene.id === selectedScene)?.description ?? 'Choose a prepared scene from the Scenes tab, or upload an image below.'}</p>
+                  <button className="text-link" onClick={() => setPage('scenes')}>Open scene library <ArrowRight size={14} /></button>
+                </section>
+                <div className="or-divider"><span>OR UPLOAD</span></div>
               </>}
               <UploadDropzone file={file} onFile={(selected) => { setFile(selected); if (selected) setError('') }} onError={setError} disabled={loading} pngPrototype={pngPrototype} />
               {error && <div className="error-box" role="alert"><CircleAlert size={17} /><span>{error}</span></div>}

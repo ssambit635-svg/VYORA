@@ -18,7 +18,7 @@ function makeFallbackSatellite(accent: string) {
   const group = new THREE.Group()
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(.14, .17, .14),
-    new THREE.MeshStandardMaterial({ color: '#d4d9e6', metalness: .68, roughness: .36 }),
+    new THREE.MeshStandardMaterial({ color: '#d9d9d9', metalness: .68, roughness: .36 }),
   )
   group.add(body)
   const panelMaterial = new THREE.MeshStandardMaterial({ color: accent, metalness: .42, roughness: .42, emissive: accent, emissiveIntensity: .08 })
@@ -29,7 +29,7 @@ function makeFallbackSatellite(accent: string) {
   }
   const antenna = new THREE.Mesh(
     new THREE.ConeGeometry(.052, .1, 8),
-    new THREE.MeshStandardMaterial({ color: '#f2eee3', metalness: .7, roughness: .3 }),
+    new THREE.MeshStandardMaterial({ color: '#eeeeee', metalness: .7, roughness: .3 }),
   )
   antenna.rotation.z = Math.PI
   antenna.position.y = -.12
@@ -71,12 +71,12 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
       zoomTargetRef.current = THREE.MathUtils.clamp(zoomTargetRef.current + event.deltaY * .0045, 3.6, 8.5)
     }
     if (enableScrollZoom) wrapper.addEventListener('wheel', handleWheel, { passive: false })
-    const ambient = new THREE.HemisphereLight('#dfe8ff', '#10131c', 1.05)
+    const ambient = new THREE.HemisphereLight('#e8e8e8', '#131313', 1.05)
     scene.add(ambient)
-    const sun = new THREE.DirectionalLight('#fff4df', 2.6)
+    const sun = new THREE.DirectionalLight('#f5f5f5', 2.6)
     sun.position.set(-4.4, 2.7, 5.2)
     scene.add(sun)
-    const rim = new THREE.DirectionalLight('#8d80bc', .72)
+    const rim = new THREE.DirectionalLight('#878787', .72)
     rim.position.set(3.5, -1.5, -4.2)
     scene.add(rim)
 
@@ -95,7 +95,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
 
     const earth = new THREE.Mesh(
       sphereGeometry,
-      new THREE.MeshStandardMaterial({ color: '#b5bdd0', roughness: .94, metalness: 0, emissive: '#17111f', emissiveIntensity: .12 }),
+      new THREE.MeshStandardMaterial({ color: '#bdbdbd', roughness: .94, metalness: 0, emissive: '#131313', emissiveIntensity: .12 }),
     )
     earth.rotation.y = Math.PI * .78
     earthRoot.add(earth)
@@ -105,7 +105,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
       configureTexture(dayTexture)
       const material = earth.material as THREE.MeshStandardMaterial
       material.map = dayTexture
-      material.color.set('#dce3f2')
+      material.color.set('#e3e3e3')
       material.needsUpdate = true
     })
     textureLoader.load('/assets/earth-night.webp', (nightTexture) => {
@@ -113,14 +113,14 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
       configureTexture(nightTexture)
       const material = earth.material as THREE.MeshStandardMaterial
       material.emissiveMap = nightTexture
-      material.emissive.set('#c18b4b')
+      material.emissive.set('#929292')
       material.emissiveIntensity = .28
       material.needsUpdate = true
     })
 
     const clouds = new THREE.Mesh(
       new THREE.SphereGeometry(earthRadius * 1.008, 96, 64),
-      new THREE.MeshStandardMaterial({ color: '#e8eaf2', transparent: true, opacity: .19, depthWrite: false, roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: '#eaeaea', transparent: true, opacity: .19, depthWrite: false, roughness: 1 }),
     )
     earthRoot.add(clouds)
     textureLoader.load('/assets/earth-clouds.webp', (cloudTexture) => {
@@ -138,7 +138,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
         transparent: true,
         side: THREE.BackSide,
         depthWrite: false,
-        uniforms: { glowColor: { value: new THREE.Color('#8d84e8') } },
+        uniforms: { glowColor: { value: new THREE.Color('#8d8d8d') } },
         vertexShader: `varying vec3 vNormal; varying vec3 vViewPosition; void main(){ vec4 mvPosition=modelViewMatrix*vec4(position,1.0); vNormal=normalize(normalMatrix*normal); vViewPosition=-mvPosition.xyz; gl_Position=projectionMatrix*mvPosition; }`,
         fragmentShader: `uniform vec3 glowColor; varying vec3 vNormal; varying vec3 vViewPosition; void main(){ float rim=pow(1.0-max(dot(normalize(vNormal),normalize(vViewPosition)),0.0),2.5); gl_FragColor=vec4(glowColor, rim*.1); }`,
       }),
@@ -194,8 +194,8 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
         // The hand-built fallback remains visible if the optional NASA GLB cannot load.
       })
     }
-    addOrbit(1.94, new THREE.Euler(.65, .06, -.28), '#b5a5e8', .48, .4, '/assets/nasa-goes.glb', '#a78bfa')
-    addOrbit(2.12, new THREE.Euler(-.82, .24, .42), '#91aacd', .28, 2.5, '/assets/nasa-landsat8.glb', '#77b5c9')
+    addOrbit(1.94, new THREE.Euler(.65, .06, -.28), '#adadad', .48, .4, '/assets/nasa-goes.glb', '#999999')
+    addOrbit(2.12, new THREE.Euler(-.82, .24, .42), '#a7a7a7', .28, 2.5, '/assets/nasa-landsat8.glb', '#a9a9a9')
 
     const resize = () => {
       const { width, height } = wrapper.getBoundingClientRect()
