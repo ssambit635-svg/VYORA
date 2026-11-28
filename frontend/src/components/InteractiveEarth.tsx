@@ -1,231 +1,266 @@
 import { RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
+import type { RefObject } from 'react'
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 
-type LandDots = { points: [number, number][] }
-type SpherePoint = [number, number, number]
-type GlobeState = { yaw: number; pitch: number; dragging: boolean; lastX: number; lastY: number }
-type Projected = { x: number; y: number; z: number }
+const INITIAL_YAW = -0.28
+const INITIAL_PITCH = -0.08
+interface Props {
+  scrollStageRef: RefObject<HTMLElement>
+}
 
-const INITIAL_YAW = -0.58
-const INITIAL_PITCH = -0.18
-const NASA_EYES_URL = 'https://eyes.nasa.gov/apps/earth/#/satellites'
+type GlobeInteraction = { yaw: number; pitch: number; dragging: boolean; lastX: number; lastY: number }
 
-export function InteractiveEarth() {
+function makeFallbackSatellite(accent: string) {
+  const group = new THREE.Group()
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(.14, .17, .14),
+    new THREE.MeshStandardMaterial({ color: '#d4d9e6', metalness: .68, roughness: .36 }),
+  )
+  group.add(body)
+  const panelMaterial = new THREE.MeshStandardMaterial({ color: accent, metalness: .42, roughness: .42, emissive: accent, emissiveIntensity: .08 })
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(.22, .018, .14), panelMaterial)
+    wing.position.x = side * .19
+    group.add(wing)
+  }
+  const antenna = new THREE.Mesh(
+    new THREE.ConeGeometry(.052, .1, 8),
+    new THREE.MeshStandardMaterial({ color: '#f2eee3', metalness: .7, roughness: .3 }),
+  )
+  antenna.rotation.z = Math.PI
+  antenna.position.y = -.12
+  group.add(antenna)
+  return group
+}
+
+export function InteractiveEarth({ scrollStageRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const stateRef = useRef<GlobeState>({ yaw: INITIAL_YAW, pitch: INITIAL_PITCH, dragging: false, lastX: 0, lastY: 0 })
-  const pointsRef = useRef<SpherePoint[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/assets/earth-land-dots.json')
-      .then((response) => response.ok ? response.json() as Promise<LandDots> : Promise.reject(new Error('Globe data unavailable')))
-      .then((data) => {
-        if (cancelled) return
-        pointsRef.current = data.points.map(([lon, lat]) => {
-          const phi = lat * Math.PI / 180
-          const lambda = lon * Math.PI / 180
-          return [Math.cos(phi) * Math.sin(lambda), Math.sin(phi), Math.cos(phi) * Math.cos(lambda)]
-        })
-      })
-      .catch(() => { if (!cancelled) pointsRef.current = [] })
-    return () => { cancelled = true }
-  }, [])
+  const interactionRef = useRef<GlobeInteraction>({ yaw: INITIAL_YAW, pitch: INITIAL_PITCH, dragging: false, lastX: 0, lastY: 0 })
 
   useEffect(() => {
     const canvas = canvasRef.current
     const wrapper = wrapperRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !wrapper || !context) return
+    if (!canvas || !wrapper) return
 
-    let frame = 0
-    let width = 0
-    let height = 0
-    let pixelRatio = 1
-    let previous = 0
-    let lastDraw = 0
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const resize = () => {
-      const rect = wrapper.getBoundingClientRect()
-      pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-      width = rect.width
-      height = rect.height
-      canvas.width = Math.round(width * pixelRatio)
-      canvas.height = Math.round(height * pixelRatio)
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' })
+    } catch {
+      wrapper.classList.add('earth-webgl-unavailable')
+      return
     }
-    const observer = new ResizeObserver(resize)
-    observer.observe(wrapper)
+    let disposed = false
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.08
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(34, 1, .1, 80)
+    camera.position.set(0, .02, 6.05)
+    const ambient = new THREE.HemisphereLight('#dfe8ff', '#10131c', 1.05)
+    scene.add(ambient)
+    const sun = new THREE.DirectionalLight('#fff4df', 2.6)
+    sun.position.set(-4.4, 2.7, 5.2)
+    scene.add(sun)
+    const rim = new THREE.DirectionalLight('#9b82e7', 1.15)
+    rim.position.set(3.5, -1.5, -4.2)
+    scene.add(rim)
+
+    const earthRoot = new THREE.Group()
+    scene.add(earthRoot)
+    const earthRadius = 1.42
+    const sphereGeometry = new THREE.SphereGeometry(earthRadius, 112, 80)
+    const textureLoader = new THREE.TextureLoader()
+    const textures: THREE.Texture[] = []
+    const configureTexture = (texture: THREE.Texture, color = true) => {
+      texture.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace
+      texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+      textures.push(texture)
+      return texture
+    }
+
+    const earth = new THREE.Mesh(
+      sphereGeometry,
+      new THREE.MeshStandardMaterial({ color: '#b5bdd0', roughness: .94, metalness: 0, emissive: '#17111f', emissiveIntensity: .12 }),
+    )
+    earth.rotation.y = Math.PI * .78
+    earthRoot.add(earth)
+
+    textureLoader.load('/assets/earth-day.webp', (dayTexture) => {
+      if (disposed) { dayTexture.dispose(); return }
+      configureTexture(dayTexture)
+      const material = earth.material as THREE.MeshStandardMaterial
+      material.map = dayTexture
+      material.color.set('#dce3f2')
+      material.needsUpdate = true
+    })
+    textureLoader.load('/assets/earth-night.webp', (nightTexture) => {
+      if (disposed) { nightTexture.dispose(); return }
+      configureTexture(nightTexture)
+      const material = earth.material as THREE.MeshStandardMaterial
+      material.emissiveMap = nightTexture
+      material.emissive.set('#c18b4b')
+      material.emissiveIntensity = .42
+      material.needsUpdate = true
+    })
+
+    const clouds = new THREE.Mesh(
+      new THREE.SphereGeometry(earthRadius * 1.008, 96, 64),
+      new THREE.MeshStandardMaterial({ color: '#e8eaf2', transparent: true, opacity: .19, depthWrite: false, roughness: 1 }),
+    )
+    earthRoot.add(clouds)
+    textureLoader.load('/assets/earth-clouds.webp', (cloudTexture) => {
+      if (disposed) { cloudTexture.dispose(); return }
+      configureTexture(cloudTexture)
+      const material = clouds.material as THREE.MeshStandardMaterial
+      material.map = cloudTexture
+      material.alphaMap = cloudTexture
+      material.needsUpdate = true
+    })
+
+    const atmosphere = new THREE.Mesh(
+      new THREE.SphereGeometry(earthRadius * 1.038, 96, 64),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        side: THREE.BackSide,
+        depthWrite: false,
+        uniforms: { glowColor: { value: new THREE.Color('#8d84e8') } },
+        vertexShader: `varying vec3 vNormal; varying vec3 vViewPosition; void main(){ vec4 mvPosition=modelViewMatrix*vec4(position,1.0); vNormal=normalize(normalMatrix*normal); vViewPosition=-mvPosition.xyz; gl_Position=projectionMatrix*mvPosition; }`,
+        fragmentShader: `uniform vec3 glowColor; varying vec3 vNormal; varying vec3 vViewPosition; void main(){ float rim=pow(1.0-max(dot(normalize(vNormal),normalize(vViewPosition)),0.0),2.5); gl_FragColor=vec4(glowColor, rim*.16); }`,
+      }),
+    )
+    earthRoot.add(atmosphere)
+
+    const orbitMaterial = (color: string, opacity: number) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false })
+    const satelliteAnchors: THREE.Group[] = []
+    const gltfLoader = new GLTFLoader()
+    gltfLoader.setMeshoptDecoder(MeshoptDecoder)
+    const disposeObject = (root: THREE.Object3D) => root.traverse((item) => {
+      if (item instanceof THREE.Mesh) {
+        item.geometry.dispose()
+        const materials = Array.isArray(item.material) ? item.material : [item.material]
+        materials.forEach((material) => material.dispose())
+      }
+    })
+    const addOrbit = (radius: number, tilt: THREE.Euler, tint: string, opacity: number, phase: number, modelPath: string, fallbackColor: string) => {
+      const orbit = new THREE.Group()
+      orbit.rotation.copy(tilt)
+      const curve = new THREE.EllipseCurve(0, 0, radius, radius * .7, 0, Math.PI * 2, false, 0)
+      const points = curve.getPoints(180).map((p) => new THREE.Vector3(p.x, 0, p.y))
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), orbitMaterial(tint, opacity))
+      orbit.add(line)
+      const anchor = new THREE.Group()
+      anchor.position.set(radius, 0, 0)
+      anchor.rotation.y = phase
+      anchor.add(makeFallbackSatellite(fallbackColor))
+      orbit.add(anchor)
+      scene.add(orbit)
+      satelliteAnchors.push(orbit)
+
+      gltfLoader.load(modelPath, (gltf) => {
+        const model = gltf.scene
+        if (disposed) { disposeObject(model); return }
+        const bounds = new THREE.Box3().setFromObject(model)
+        const center = bounds.getCenter(new THREE.Vector3())
+        const size = bounds.getSize(new THREE.Vector3())
+        const scale = .42 / Math.max(size.x, size.y, size.z, .001)
+        model.scale.setScalar(scale)
+        model.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
+        model.traverse((item) => {
+          if (item instanceof THREE.Mesh) {
+            item.castShadow = false
+            item.receiveShadow = false
+            const mats = Array.isArray(item.material) ? item.material : [item.material]
+            mats.forEach((mat) => { if ('roughness' in mat) (mat as THREE.MeshStandardMaterial).roughness = Math.max(.32, (mat as THREE.MeshStandardMaterial).roughness ?? .45) })
+          }
+        })
+        for (const child of [...anchor.children]) { anchor.remove(child); disposeObject(child) }
+        anchor.add(model)
+      }, undefined, () => {
+        // The hand-built fallback remains visible if the optional NASA GLB cannot load.
+      })
+    }
+    addOrbit(1.94, new THREE.Euler(.65, .06, -.28), '#b5a5e8', .48, .4, '/assets/nasa-goes.glb', '#a78bfa')
+    addOrbit(2.12, new THREE.Euler(-.82, .24, .42), '#91aacd', .28, 2.5, '/assets/nasa-landsat8.glb', '#77b5c9')
+
+    const resize = () => {
+      const { width, height } = wrapper.getBoundingClientRect()
+      if (!width || !height) return
+      renderer.setSize(width, height, false)
+      camera.aspect = width / height
+      camera.updateProjectionMatrix()
+    }
+    const resizeObserver = new ResizeObserver(resize)
+    resizeObserver.observe(wrapper)
     resize()
 
-    const project = (x: number, y: number, z: number, yaw: number, pitch: number, radius: number, cx: number, cy: number): Projected => {
-      const cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw)
-      const x1 = x * cosYaw + z * sinYaw
-      const z1 = z * cosYaw - x * sinYaw
-      const cosPitch = Math.cos(pitch), sinPitch = Math.sin(pitch)
-      const y1 = y * cosPitch - z1 * sinPitch
-      const z2 = y * sinPitch + z1 * cosPitch
-      return { x: cx + x1 * radius, y: cy - y1 * radius, z: z2 }
+    let scrollProgress = 0
+    let targetScrollProgress = 0
+    let frame = 0
+    let previousTime = 0
+    let visible = true
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const measureScroll = () => {
+      const stage = scrollStageRef.current
+      if (!stage || reduceMotion) { targetScrollProgress = 0; return }
+      const rect = stage.getBoundingClientRect()
+      const headerHeight = document.querySelector('.landing-header')?.getBoundingClientRect().height ?? 0
+      targetScrollProgress = THREE.MathUtils.clamp((headerHeight - rect.top) / Math.max(1, window.innerHeight * .68), 0, 1)
     }
-    const toVector = (lon: number, lat: number): SpherePoint => {
-      const phi = lat * Math.PI / 180
-      const lambda = lon * Math.PI / 180
-      return [Math.cos(phi) * Math.sin(lambda), Math.sin(phi), Math.cos(phi) * Math.cos(lambda)]
-    }
-    const latitudeLines: SpherePoint[][] = []
-    for (let lat = -75; lat <= 75; lat += 15) {
-      const line: SpherePoint[] = []
-      for (let lon = -180; lon <= 180; lon += 3) line.push(toVector(lon, lat))
-      latitudeLines.push(line)
-    }
-    const longitudeLines: SpherePoint[][] = []
-    for (let lon = -165; lon <= 180; lon += 15) {
-      const line: SpherePoint[] = []
-      for (let lat = -70; lat <= 70; lat += 3) line.push(toVector(lon, lat))
-      longitudeLines.push(line)
-    }
-    const lineOnSphere = (coordinates: SpherePoint[], yaw: number, pitch: number, radius: number, cx: number, cy: number, color: string, lineWidth: number) => {
-      context.beginPath()
-      let started = false
-      for (const [x, y, z] of coordinates) {
-        const p = project(x, y, z, yaw, pitch, radius, cx, cy)
-        if (p.z > 0) {
-          if (!started) context.moveTo(p.x, p.y)
-          else context.lineTo(p.x, p.y)
-          started = true
-        } else started = false
-      }
-      context.strokeStyle = color
-      context.lineWidth = lineWidth
-      context.stroke()
-    }
-    const orbitPoint = (angle: number, inclination: number, node: number, altitude: number) => {
-      const along = Math.cos(angle)
-      const across = Math.sin(angle)
-      const x0 = along
-      const y0 = across * Math.sin(inclination)
-      const z0 = across * Math.cos(inclination)
-      return {
-        x: (x0 * Math.cos(node) - y0 * Math.sin(node)) * altitude,
-        y: (x0 * Math.sin(node) + y0 * Math.cos(node)) * altitude,
-        z: z0 * altitude,
-      }
-    }
-    const drawOrbit = (yaw: number, pitch: number, radius: number, cx: number, cy: number, angle: number, inclination: number, node: number, altitude: number, front: boolean) => {
-      const samples = 240
-      context.beginPath()
-      let started = false
-      for (let i = 0; i <= samples; i += 1) {
-        const t = i / samples * Math.PI * 2
-        const point = orbitPoint(t, inclination, node, altitude)
-        const p = project(point.x, point.y, point.z, yaw, pitch, radius, cx, cy)
-        if ((p.z > 0) === front) {
-          if (!started) context.moveTo(p.x, p.y)
-          else context.lineTo(p.x, p.y)
-          started = true
-        } else started = false
-      }
-      context.setLineDash(front ? [] : [2, 6])
-      context.strokeStyle = front ? 'rgba(179, 159, 224, .68)' : 'rgba(107, 95, 132, .32)'
-      context.lineWidth = front ? 1.1 : .8
-      context.stroke()
-      context.setLineDash([])
-      const satellite = orbitPoint(angle, inclination, node, altitude)
-      const p = project(satellite.x, satellite.y, satellite.z, yaw, pitch, radius, cx, cy)
-      if (front && p.z > 0) drawSatellite(p.x, p.y, radius, angle + node)
-    }
-    const drawSatellite = (x: number, y: number, radius: number, heading: number) => {
-      const size = Math.max(6, radius * .045)
-      context.save()
-      context.translate(x, y)
-      context.rotate(heading)
-      context.fillStyle = '#d7caf7'
-      context.strokeStyle = '#d7caf7'
-      context.lineWidth = 1
-      context.fillRect(-size * .25, -size * .32, size * .5, size * .64)
-      context.fillStyle = '#83cbbd'
-      context.fillRect(-size * 1.45, -size * .25, size * .95, size * .5)
-      context.fillRect(size * .5, -size * .25, size * .95, size * .5)
-      context.beginPath()
-      context.moveTo(0, -size * .3)
-      context.lineTo(size * .2, -size * .72)
-      context.stroke()
-      context.restore()
-    }
+    measureScroll()
+    window.addEventListener('scroll', measureScroll, { passive: true })
+    window.addEventListener('resize', measureScroll)
+    const visibilityObserver = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting }, { rootMargin: '120px' })
+    visibilityObserver.observe(wrapper)
 
     const render = (time: number) => {
-      if (!width || !height || time - lastDraw < 1000 / 30) { frame = requestAnimationFrame(render); return }
-      const dt = previous ? Math.min(50, time - previous) : 33
-      previous = time
-      lastDraw = time
-      const state = stateRef.current
-      const motionTime = reduceMotion ? 0 : time
-      if (!reduceMotion && !state.dragging) state.yaw += dt * .000012
-
-      context.clearRect(0, 0, width, height)
-      const cx = width / 2
-      const cy = height / 2
-      const radius = Math.min(width, height) * .385
-      const yaw = state.yaw
-      const pitch = state.pitch
-
-      // Subtle, matte orbit paths behind the globe.
-      drawOrbit(yaw, pitch, radius, cx, cy, motionTime * .00016, .68, -.52, 1.2, false)
-      drawOrbit(yaw, pitch, radius, cx, cy, motionTime * .00011 + 1.9, 1.08, .9, 1.31, false)
-
-      const sphere = context.createRadialGradient(cx - radius * .34, cy - radius * .38, radius * .06, cx, cy, radius * 1.12)
-      sphere.addColorStop(0, '#211b30')
-      sphere.addColorStop(.62, '#120f1c')
-      sphere.addColorStop(1, '#09080e')
-      context.beginPath()
-      context.arc(cx, cy, radius, 0, Math.PI * 2)
-      context.fillStyle = sphere
-      context.fill()
-      context.save()
-      context.beginPath()
-      context.arc(cx, cy, radius, 0, Math.PI * 2)
-      context.clip()
-
-      // Graticule is a visual reference only; it is not a map coordinate display.
-      for (const line of latitudeLines) lineOnSphere(line, yaw, pitch, radius, cx, cy, 'rgba(159, 145, 190, .13)', .65)
-      for (const line of longitudeLines) lineOnSphere(line, yaw, pitch, radius, cx, cy, 'rgba(159, 145, 190, .12)', .65)
-
-      for (const [x, y, z] of pointsRef.current) {
-        const p = project(x, y, z, yaw, pitch, radius, cx, cy)
-        if (p.z <= 0) continue
-        const detail = .7 + p.z * .5
-        context.fillStyle = p.z > .7 ? 'rgba(207, 192, 245, .94)' : 'rgba(164, 143, 213, .78)'
-        const dot = Math.max(.65, radius * .0052 * detail)
-        context.fillRect(p.x - dot / 2, p.y - dot / 2, dot, dot)
-      }
-
-      // Front hemisphere of each orbit, with simple spacecraft silhouettes.
-      drawOrbit(yaw, pitch, radius, cx, cy, motionTime * .00016, .68, -.52, 1.2, true)
-      drawOrbit(yaw, pitch, radius, cx, cy, motionTime * .00011 + 1.9, 1.08, .9, 1.31, true)
-      context.restore()
-      context.beginPath()
-      context.arc(cx, cy, radius, 0, Math.PI * 2)
-      context.strokeStyle = 'rgba(196, 180, 232, .32)'
-      context.lineWidth = 1
-      context.stroke()
-
       frame = requestAnimationFrame(render)
+      if (!visible || time - previousTime < 1000 / 40) return
+      const delta = previousTime ? Math.min(50, time - previousTime) : 25
+      previousTime = time
+      scrollProgress = THREE.MathUtils.damp(scrollProgress, targetScrollProgress, 4.5, delta / 1000)
+      const interaction = interactionRef.current
+      const turn = reduceMotion ? 0 : time * .000012
+      earthRoot.rotation.y = turn + scrollProgress * 1.45 + interaction.yaw
+      earthRoot.rotation.x = interaction.pitch + Math.sin(scrollProgress * Math.PI) * .045
+      clouds.rotation.y = earthRoot.rotation.y + (reduceMotion ? 0 : time * .0000025)
+      satelliteAnchors[0].rotation.y = time * .000055 + scrollProgress * 2.4
+      satelliteAnchors[1].rotation.y = -time * .00004 - scrollProgress * 1.8
+      const zoom = 6.05 - Math.sin(scrollProgress * Math.PI) * .3 - scrollProgress * .14
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, zoom, 3.4, delta / 1000)
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, .02 + scrollProgress * .1, 3, delta / 1000)
+      camera.lookAt(0, 0, 0)
+      renderer.render(scene, camera)
     }
     frame = requestAnimationFrame(render)
-    return () => {
-      cancelAnimationFrame(frame)
-      observer.disconnect()
-    }
-  }, [])
 
-  const rotate = useCallback((dx: number, dy: number) => {
-    const state = stateRef.current
-    state.yaw += dx * .008
-    state.pitch = Math.max(-1.05, Math.min(1.05, state.pitch + dy * .008))
-  }, [])
+    return () => {
+      disposed = true
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', measureScroll)
+      window.removeEventListener('resize', measureScroll)
+      resizeObserver.disconnect()
+      visibilityObserver.disconnect()
+      scene.traverse((item) => {
+        if (item instanceof THREE.Mesh) {
+          item.geometry.dispose()
+          const materials = Array.isArray(item.material) ? item.material : [item.material]
+          materials.forEach((material) => material.dispose())
+        }
+      })
+      textures.forEach((texture) => texture.dispose())
+      renderer.dispose()
+    }
+  }, [scrollStageRef])
+
   const reset = useCallback(() => {
-    stateRef.current.yaw = INITIAL_YAW
-    stateRef.current.pitch = INITIAL_PITCH
+    interactionRef.current.yaw = INITIAL_YAW
+    interactionRef.current.pitch = INITIAL_PITCH
   }, [])
 
   return (
@@ -233,36 +268,36 @@ export function InteractiveEarth() {
       <canvas
         ref={canvasRef}
         className="interactive-earth-canvas"
-        aria-label="Interactive purple Earth globe with illustrative satellite orbits. Drag to rotate; use arrow keys or the reset button. Satellite positions are not live."
+        aria-label="Three-dimensional Earth with NASA GOES and Landsat spacecraft models on illustrative, not-to-scale orbits. Drag to rotate; press arrow keys to rotate or Home to reset. Scrolling the landing page moves the camera."
         role="img"
         tabIndex={0}
         onPointerDown={(event) => {
-          stateRef.current.dragging = true
-          stateRef.current.lastX = event.clientX
-          stateRef.current.lastY = event.clientY
+          interactionRef.current.dragging = true
+          interactionRef.current.lastX = event.clientX
+          interactionRef.current.lastY = event.clientY
           event.currentTarget.setPointerCapture(event.pointerId)
         }}
         onPointerMove={(event) => {
-          const state = stateRef.current
+          const state = interactionRef.current
           if (!state.dragging) return
-          rotate(event.clientX - state.lastX, event.clientY - state.lastY)
+          state.yaw += (event.clientX - state.lastX) * .006
+          state.pitch = THREE.MathUtils.clamp(state.pitch + (event.clientY - state.lastY) * .006, -.8, .8)
           state.lastX = event.clientX
           state.lastY = event.clientY
         }}
-        onPointerUp={() => { stateRef.current.dragging = false }}
-        onPointerCancel={() => { stateRef.current.dragging = false }}
+        onPointerUp={() => { interactionRef.current.dragging = false }}
+        onPointerCancel={() => { interactionRef.current.dragging = false }}
         onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') { event.preventDefault(); rotate(-13, 0) }
-          if (event.key === 'ArrowRight') { event.preventDefault(); rotate(13, 0) }
-          if (event.key === 'ArrowUp') { event.preventDefault(); rotate(0, -10) }
-          if (event.key === 'ArrowDown') { event.preventDefault(); rotate(0, 10) }
+          if (event.key === 'ArrowLeft') { event.preventDefault(); interactionRef.current.yaw -= .16 }
+          if (event.key === 'ArrowRight') { event.preventDefault(); interactionRef.current.yaw += .16 }
+          if (event.key === 'ArrowUp') { event.preventDefault(); interactionRef.current.pitch = THREE.MathUtils.clamp(interactionRef.current.pitch - .12, -.8, .8) }
+          if (event.key === 'ArrowDown') { event.preventDefault(); interactionRef.current.pitch = THREE.MathUtils.clamp(interactionRef.current.pitch + .12, -.8, .8) }
           if (event.key === 'Home') { event.preventDefault(); reset() }
         }}
       />
-      <button className="globe-reset" onClick={reset} aria-label="Reset globe orientation" title="Reset globe orientation"><RotateCcw size={13} /></button>
-      <span className="globe-drag-hint">Drag to rotate · arrow keys · Home to reset</span>
+      <button className="globe-reset" onClick={reset} aria-label="Reset Earth orientation" title="Reset Earth orientation"><RotateCcw size={14} /></button>
+      <span className="globe-drag-hint">DRAG TO ROTATE <i /> SCROLL TO EXPLORE</span>
+      <div className="earth-spacecraft-tags" aria-hidden="true"><span>GOES</span><span>LANDSAT 8</span></div>
     </div>
   )
 }
-
-export { NASA_EYES_URL }

@@ -10,7 +10,7 @@ A simple 2–3 minute walkthrough. **Read the runner status from the app before 
 
 ## Talk track, point by point
 
-1. **Show the landing page.** Drag the purple Earth or use arrow keys, then reset it. “The vector globe is an interaction, not a map or live data. Its small spacecraft and orbit paths are illustrative. NASA Eyes opens separately for real satellite positions.”
+1. **Show the landing dashboard.** Drag the Earth, use arrow keys, then scroll through the sticky overview. “This is a textured 3D Earth with NASA GOES and Landsat 8 spacecraft models. Their paths are illustrative and not-to-scale; no live satellite positions are connected.”
 2. **Explain the workflow.** Point to Choose a scene → Compare views → Note and export. “The diagram shows the local review flow; it does not imply an external data feed.”
 3. **Show the workspace.** Point out the four synthetic examples and the API-reported runner mode/version. “The status is live from the local API; this demo does not use production login.”
 4. **Run one scene.** “I will show the output this runner returned. If the banner says Development, these are hand-authored rules—not trained AI inference.”
@@ -26,7 +26,7 @@ A simple 2–3 minute walkthrough. **Read the runner status from the app before 
 | Feature | Status | Judge-friendly description |
 |---|---|---|
 | Landing page and demo entry | Present | Explains the workflow and keeps demo access local; no production authentication is claimed. |
-| Interactive purple Earth | Present | Canvas-rendered vector land dots; drag, arrow-key rotation and reset. Orbit and spacecraft illustrations are not live positions or analysis data. |
+| Interactive 3D Earth and spacecraft | Present | NASA Earth day/night/cloud textures and NASA GOES/Landsat 8 GLB models; drag, keyboard and reset controls. Scroll moves the camera. Orbits are illustrative, not-to-scale, and not live tracking. |
 | Workflow diagram | Present | Shows input → estimate → human review at a glance. |
 | NASA Eyes / NOAA GOES references | External links | NASA Eyes is an external satellite tracker; NOAA is an external real imagery animation. Neither is embedded or connected to Vyora runs. |
 | Shared public/workspace footer | Present | Includes workspace navigation, runner label, prototype scope and external references. |

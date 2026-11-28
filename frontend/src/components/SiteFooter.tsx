@@ -1,5 +1,5 @@
 import { ArrowUpRight, BookOpen, Layers3, Radar } from 'lucide-react'
-import { NASA_EYES_URL } from './InteractiveEarth'
+import { NASA_EYES_URL } from '../externalLinks'
 
 type Page = 'overview' | 'analyse' | 'scenes' | 'method'
 

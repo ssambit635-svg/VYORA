@@ -29,7 +29,7 @@ Vyora is an experimental image-to-image application for comparing an input image
 These are screenshots of the running local web app. The bundled scene thumbnails are **synthetic illustrations**, not satellite captures; output shown in the result view is from the development runner and is not a real-world interpretation.
 
 <p align="center">
-  <img src="docs/images/vyora-landing.png" alt="Vyora landing page with product scope, local workflow and illustrative globe" width="100%" />
+  <img src="docs/images/vyora-landing.png" alt="Vyora landing dashboard with interactive NASA-textured 3D Earth and spacecraft models" width="100%" />
 </p>
 
 <table>
@@ -47,7 +47,7 @@ These are screenshots of the running local web app. The bundled scene thumbnails
 
 ## What the app can do
 
-- Rotate the purple vector globe by dragging or using the arrow keys; the satellite-shaped orbit markers are illustrative, not live positions.
+- Explore an interactive, NASA-textured 3D Earth; drag to rotate, use arrow keys, or scroll the landing dashboard to move the camera. A NASA GOES and a Landsat 8 3D spacecraft model orbit on illustrative, not-to-scale paths.
 - Open NASA Eyes for an external view of real Earth-observing satellite positions, or the NOAA GOES animation reference. Neither is connected to Vyora's local model runs.
 - Browse four bundled synthetic scenes or provide a supported local image.
 - Compare the original input, estimated colour output and runner-specific consistency view.
@@ -181,7 +181,7 @@ The band indexes and scale above are examples and require verification against t
 | Scientific scope | [ML status](docs/ML_STATUS.md) · [Model card](docs/MODEL_CARD.md) · [Data card](docs/DATA_CARD.md) · [Evaluation](docs/EVALUATION.md) |
 | Development | [Test checklist](docs/TEST_CHECKLIST.md) · [Project details](docs/PROJECT_DETAILS.md) · [Implementation decisions](docs/IMPLEMENTATION_DECISIONS.md) |
 | Presentation | [PPT alignment and selection guide](docs/PPT_ALIGNMENT_AND_SELECTION_GUIDE.md) |
-| Visual assets | [Interactive globe data, attribution and external references](docs/ASSETS.md) |
+| Visual assets | [3D globe textures, spacecraft model attribution and external references](docs/ASSETS.md) |
 
 ## Development checks
 

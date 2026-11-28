@@ -1,10 +1,12 @@
 # Visual assets and external references
 
-## Interactive Earth globe
+## Landing-page 3D Earth and spacecraft
 
-`frontend/public/assets/earth-land-dots.json` is a derived point grid from Natural Earth 1:110m land polygons distributed in the `world-atlas` package. It is used only to render a stylized interactive globe locally. It is **not satellite imagery, live geospatial data, a boundary product, or an analysis layer**. `world-atlas` is distributed under ISC terms; the underlying Natural Earth data is public domain.
+- `earth-day.webp`, `earth-night.webp`, and `earth-clouds.webp` are compressed/resized landing-page textures derived from the Solar System Scope Earth day/night/cloud maps, distributed as part of [`forest0xia/openglobes-space`](https://github.com/forest0xia/openglobes-space). That repository credits the Earth maps to Solar System Scope via Wikimedia Commons under CC BY 4.0. Vyora keeps the textures local; the scene makes no texture-service requests.
+- `nasa-goes.glb` and `nasa-landsat8.glb` are optimized NASA spacecraft models distributed by [`forest0xia/openglobes-space`](https://github.com/forest0xia/openglobes-space), whose repository is Apache-2.0. The source models are credited to NASA 3D Resources and are described there as public-domain NASA models.
+- Three.js and its bundled Meshopt decoder render the local models. The GLB geometry was converted to `EXT_meshopt_compression` for faster local delivery; source licenses remain with their respective upstream assets and packages.
 
-The purple colour treatment and orbit lines are interface artwork. Their satellite-shaped markers do not represent named spacecraft or current orbital positions. Users who want real mission/position data can open the official external NASA Eyes 3D satellite tracker from the landing page. Vyora does not fetch or use that external data in its model runs.
+The spacecraft models move along **illustrative, not-to-scale paths**. Vyora does not claim their rendered positions match current orbits, nor does the landing scene fetch live satellite tracking data. For real mission/position data, users can open the separate NASA Eyes tracker; it is not connected to Vyora runs.
 
 ## External Earth-observation references
 
