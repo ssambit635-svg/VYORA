@@ -23,7 +23,7 @@ const navigation: { id: Page; label: string; icon: typeof LayoutDashboard }[] = 
 export function AppHeader({ signedIn, access = false, activePage, onNavigate, onEnter, onBack, onSignOut }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <header className="app-header">
+    <header className={`app-header ${!signedIn && !access ? 'landing-header' : ''}`}>
       <div className="app-header-inner">
         <a className="wordmark" href={signedIn ? '#overview' : '#home'} onClick={(event) => {
           if (signedIn) { event.preventDefault(); onNavigate?.('overview') }
@@ -59,7 +59,7 @@ export function AppHeader({ signedIn, access = false, activePage, onNavigate, on
         ) : (
           <>
             <nav className="public-nav" aria-label="Main navigation">
-              <a href="#product">Product</a><a href="#workflow">Workflow</a><a href="#limits">Limitations</a>
+              <a className="landing-nav-active" href="#home">Overview</a><a href="#scene-library">Scenes</a><a href="#workflow">Workflow</a><a href="#limits">Method</a>
             </nav>
             <button className="header-enter" onClick={onEnter}>Enter workspace <ArrowRight size={15} /></button>
           </>

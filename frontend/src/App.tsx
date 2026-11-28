@@ -10,6 +10,7 @@ import { ProcessingState } from './components/ProcessingState'
 import { ResultWorkspace } from './components/ResultWorkspace'
 import { SceneLibraryPage } from './components/SceneLibraryPage'
 import { ScenePicker } from './components/ScenePicker'
+import { SiteFooter } from './components/SiteFooter'
 import { UploadDropzone } from './components/UploadDropzone'
 import type { DemoScene, Health, InferenceResult } from './types'
 
@@ -82,7 +83,7 @@ export default function App() {
   }
 
   function showWorkflow() {
-    document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById('limits')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
@@ -97,7 +98,7 @@ export default function App() {
         onSignOut={exitDemo}
       />
 
-      {screen === 'landing' && <LandingPage sceneCount={scenes.length} health={health} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
+      {screen === 'landing' && <LandingPage sceneCount={scenes.length} scenes={scenes} health={health} onEnter={() => setScreen('access')} onMethod={showWorkflow} />}
       {screen === 'access' && <DemoAccessPage onContinue={enterDemo} onBack={() => setScreen('landing')} />}
       {screen === 'workspace' && <>
         {page === 'overview' && <OverviewPage health={health} scenes={scenes} result={result} onNavigate={setPage} onChooseScene={chooseScene} />}
@@ -133,7 +134,7 @@ export default function App() {
         </main>}
       </>}
 
-      {screen === 'workspace' && <footer className="workspace-footer"><span>VYORA<span className="wordmark-period">.</span></span><span>Local research prototype · Not an official map or warning product</span></footer>}
+      {screen === 'workspace' && <SiteFooter workspace runnerLabel={health ? health.mode.toUpperCase() : 'API CHECKING'} onNavigate={setPage} />}
     </div>
   )
 }
