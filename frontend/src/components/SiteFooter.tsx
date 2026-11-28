@@ -17,8 +17,7 @@ export function SiteFooter({ runnerLabel, workspace = false, onNavigate }: Props
       <div className="site-footer-main">
         <div className="footer-about">
           <a className="footer-brand" href={workspace ? '#overview' : '#home'} onClick={workspace ? () => onNavigate?.('overview') : undefined} aria-label="Vyora home">
-            <img src="/assets/vyora-mark.svg" alt="" aria-hidden="true" />
-            <span>VYORA<span className="wordmark-period">.</span></span>
+            <img src="/assets/vyora-brand.svg" alt="Vyora" />
           </a>
           <p>Local-first image review. Keep the source visible and the limits clear.</p>
           <span className="footer-scope">Research prototype · Not a warning product</span>
@@ -33,7 +32,7 @@ export function SiteFooter({ runnerLabel, workspace = false, onNavigate }: Props
             <button onClick={() => onNavigate?.('method')}><BookOpen size={14} /> Method & limits</button>
           </> : <>
             <a href="#workflow">Workflow</a>
-            <a href="#review">What a run returns</a>
+            <a href="#scene-library">Example scenes</a>
             <a href="#limits">Scope & limitations</a>
           </>}
         </nav>

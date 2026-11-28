@@ -28,8 +28,7 @@ export function AppHeader({ signedIn, access = false, activePage, onNavigate, on
         <a className="wordmark" href={signedIn ? '#overview' : '#home'} onClick={(event) => {
           if (signedIn) { event.preventDefault(); onNavigate?.('overview') }
         }} aria-label="Vyora home">
-          <img className="wordmark-symbol" src="/assets/vyora-mark.svg" alt="" aria-hidden="true" />
-          <span>VYORA<span className="wordmark-period">.</span></span>
+          <img className="wordmark-image" src="/assets/vyora-brand.svg" alt="Vyora" />
         </a>
 
         {signedIn ? (
@@ -59,7 +58,7 @@ export function AppHeader({ signedIn, access = false, activePage, onNavigate, on
         ) : (
           <>
             <nav className="public-nav" aria-label="Main navigation">
-              <a className="landing-nav-active" href="#home">Overview</a><a href="#scene-library">Scenes</a><a href="#workflow">Workflow</a><a href="#limits">Method</a>
+              <a className="landing-nav-active" href="#home">Home</a><a href="#scene-library">Scenes</a><a href="#workflow">Workflow</a><a href="#limits">Method</a>
             </nav>
             <button className="header-enter" onClick={onEnter}>Enter workspace <ArrowRight size={15} /></button>
           </>

@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
@@ -9,6 +9,7 @@ const INITIAL_YAW = -0.28
 const INITIAL_PITCH = -0.08
 interface Props {
   scrollStageRef: RefObject<HTMLElement>
+  enableScrollZoom?: boolean
 }
 
 type GlobeInteraction = { yaw: number; pitch: number; dragging: boolean; lastX: number; lastY: number }
@@ -36,9 +37,10 @@ function makeFallbackSatellite(accent: string) {
   return group
 }
 
-export function InteractiveEarth({ scrollStageRef }: Props) {
+export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const zoomTargetRef = useRef(6.05)
   const interactionRef = useRef<GlobeInteraction>({ yaw: INITIAL_YAW, pitch: INITIAL_PITCH, dragging: false, lastX: 0, lastY: 0 })
 
   useEffect(() => {
@@ -62,6 +64,13 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(34, 1, .1, 80)
     camera.position.set(0, .02, 6.05)
+    zoomTargetRef.current = 6.05
+    const handleWheel = (event: WheelEvent) => {
+      if (!enableScrollZoom) return
+      event.preventDefault()
+      zoomTargetRef.current = THREE.MathUtils.clamp(zoomTargetRef.current + event.deltaY * .0045, 3.6, 8.5)
+    }
+    if (enableScrollZoom) wrapper.addEventListener('wheel', handleWheel, { passive: false })
     const ambient = new THREE.HemisphereLight('#dfe8ff', '#10131c', 1.05)
     scene.add(ambient)
     const sun = new THREE.DirectionalLight('#fff4df', 2.6)
@@ -207,7 +216,7 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const measureScroll = () => {
       const stage = scrollStageRef.current
-      if (!stage || reduceMotion) { targetScrollProgress = 0; return }
+      if (!stage || reduceMotion || enableScrollZoom) { targetScrollProgress = 0; return }
       const rect = stage.getBoundingClientRect()
       const headerHeight = document.querySelector('.landing-header')?.getBoundingClientRect().height ?? 0
       targetScrollProgress = THREE.MathUtils.clamp((headerHeight - rect.top) / Math.max(1, window.innerHeight * .68), 0, 1)
@@ -231,7 +240,7 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
       clouds.rotation.y = earthRoot.rotation.y + (reduceMotion ? 0 : time * .0000025)
       satelliteAnchors[0].rotation.y = time * .000055 + scrollProgress * 2.4
       satelliteAnchors[1].rotation.y = -time * .00004 - scrollProgress * 1.8
-      const zoom = 6.05 - Math.sin(scrollProgress * Math.PI) * .3 - scrollProgress * .14
+      const zoom = enableScrollZoom ? zoomTargetRef.current : 6.05 - Math.sin(scrollProgress * Math.PI) * .3 - scrollProgress * .14
       camera.position.z = THREE.MathUtils.damp(camera.position.z, zoom, 3.4, delta / 1000)
       camera.position.y = THREE.MathUtils.damp(camera.position.y, .02 + scrollProgress * .1, 3, delta / 1000)
       camera.lookAt(0, 0, 0)
@@ -244,6 +253,7 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
       cancelAnimationFrame(frame)
       window.removeEventListener('scroll', measureScroll)
       window.removeEventListener('resize', measureScroll)
+      if (enableScrollZoom) wrapper.removeEventListener('wheel', handleWheel)
       resizeObserver.disconnect()
       visibilityObserver.disconnect()
       scene.traverse((item) => {
@@ -256,11 +266,15 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
       textures.forEach((texture) => texture.dispose())
       renderer.dispose()
     }
-  }, [scrollStageRef])
+  }, [scrollStageRef, enableScrollZoom])
 
   const reset = useCallback(() => {
     interactionRef.current.yaw = INITIAL_YAW
     interactionRef.current.pitch = INITIAL_PITCH
+    zoomTargetRef.current = 6.05
+  }, [])
+  const changeZoom = useCallback((amount: number) => {
+    zoomTargetRef.current = THREE.MathUtils.clamp(zoomTargetRef.current + amount, 3.6, 8.5)
   }, [])
 
   return (
@@ -268,7 +282,7 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
       <canvas
         ref={canvasRef}
         className="interactive-earth-canvas"
-        aria-label="Three-dimensional Earth with NASA GOES and Landsat spacecraft models on illustrative, not-to-scale orbits. Drag to rotate; press arrow keys to rotate or Home to reset. Scrolling the landing page moves the camera."
+        aria-label={`Three-dimensional Earth with NASA GOES and Landsat spacecraft models on illustrative, not-to-scale orbits. Drag to rotate; press arrow keys to rotate or Home to reset.${enableScrollZoom ? ' Scroll over the globe to zoom.' : ' Scrolling the page moves the camera.'}`}
         role="img"
         tabIndex={0}
         onPointerDown={(event) => {
@@ -295,8 +309,9 @@ export function InteractiveEarth({ scrollStageRef }: Props) {
           if (event.key === 'Home') { event.preventDefault(); reset() }
         }}
       />
-      <button className="globe-reset" onClick={reset} aria-label="Reset Earth orientation" title="Reset Earth orientation"><RotateCcw size={14} /></button>
-      <span className="globe-drag-hint">DRAG TO ROTATE <i /> SCROLL TO EXPLORE</span>
+      {enableScrollZoom && <div className="globe-zoom-controls" aria-label="Earth zoom controls"><button onClick={() => changeZoom(-.55)} aria-label="Zoom in" title="Zoom in"><ZoomIn size={15} /></button><button onClick={() => changeZoom(.55)} aria-label="Zoom out" title="Zoom out"><ZoomOut size={15} /></button></div>}
+      <button className="globe-reset" onClick={reset} aria-label="Reset Earth view" title="Reset Earth view"><RotateCcw size={14} /></button>
+      <span className="globe-drag-hint">DRAG TO ROTATE <i /> {enableScrollZoom ? 'SCROLL TO ZOOM' : 'SCROLL TO EXPLORE'}</span>
       <div className="earth-spacecraft-tags" aria-hidden="true"><span>GOES</span><span>LANDSAT 8</span></div>
     </div>
   )

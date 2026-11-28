@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/assets/vyora-mark.svg" alt="Vyora logo: a V-shaped signal path inside an open orbit" width="88" height="88" />
+  <img src="frontend/public/assets/vyora-brand.svg" alt="Vyora logo" width="180" height="49" />
 </p>
 
 <h1 align="center">VYORA</h1>
