@@ -28,7 +28,7 @@ export function AppHeader({ signedIn, access = false, activePage, onNavigate, on
         <a className="wordmark" href={signedIn ? '#overview' : '#home'} onClick={(event) => {
           if (signedIn) { event.preventDefault(); onNavigate?.('overview') }
         }} aria-label="Vyora home">
-          <img className="wordmark-image" src="/assets/vyora-brand.svg" alt="Vyora" />
+          <img className="wordmark-image" src="/assets/vyora-brand.png" alt="Vyora" />
         </a>
 
         {signedIn ? (

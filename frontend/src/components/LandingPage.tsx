@@ -3,13 +3,14 @@ import '@fontsource/inter/latin-500.css'
 import '@fontsource/inter/latin-600.css'
 import '@fontsource/space-grotesk/latin-500.css'
 import '@fontsource/space-grotesk/latin-600.css'
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, Eye, Layers3, Radar, ShieldAlert } from 'lucide-react'
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, Eye, Layers3, ShieldAlert } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { DemoScene, Health } from '../types'
 import { NASA_EYES_URL } from '../externalLinks'
 import { SiteFooter } from './SiteFooter'
 
 const InteractiveEarth = lazy(() => import('./InteractiveEarth').then((module) => ({ default: module.InteractiveEarth })))
+const InteractiveSatellite = lazy(() => import('./InteractiveSatellite').then((module) => ({ default: module.InteractiveSatellite })))
 
 interface Props {
   sceneCount: number
@@ -21,7 +22,9 @@ interface Props {
 
 export function LandingPage({ sceneCount, scenes, health, onEnter, onMethod }: Props) {
   const journeyRef = useRef<HTMLElement>(null)
+  const earthStageRef = useRef<HTMLElement>(null)
   const carouselRef = useRef<HTMLElement>(null)
+  const [earthReady, setEarthReady] = useState(false)
   const satelliteLabel = health?.is_ai_inference ? 'Checkpoint inference' : health ? 'Development runner' : 'API status unavailable'
 
   useEffect(() => {
@@ -32,11 +35,7 @@ export function LandingPage({ sceneCount, scenes, health, onEnter, onMethod }: P
         const headerHeight = document.querySelector('.landing-header')?.getBoundingClientRect().height ?? 0
         const travel = Math.max(1, rect.height - window.innerHeight + headerHeight)
         const progress = Math.max(0, Math.min(1, (headerHeight - rect.top) / travel))
-        stage.style.setProperty('--journey-progress', progress.toFixed(3))
-        stage.style.setProperty('--journey-shift', `${-window.innerWidth * .08 * progress}px`)
-        stage.style.setProperty('--journey-shift-mobile', `${-window.innerWidth * .04 * progress}px`)
-        stage.style.setProperty('--surface-shift', `${-36 * progress}px`)
-        stage.style.setProperty('--orbit-shift', `${27 * progress}px`)
+        stage.style.setProperty('--satellite-shift', `${-window.innerWidth * .11 * progress}px`)
       }
       const carousel = carouselRef.current
       if (carousel) {
@@ -55,7 +54,11 @@ export function LandingPage({ sceneCount, scenes, health, onEnter, onMethod }: P
       })
     }, { threshold: .25 })
     document.querySelectorAll('.manifesto-copy.reveal-lines').forEach((element) => revealObserver.observe(element))
-    return () => { window.removeEventListener('scroll', updateDepth); window.removeEventListener('resize', updateDepth); revealObserver.disconnect() }
+    const earthObserver = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setEarthReady(true); earthObserver.disconnect() }
+    }, { rootMargin: '240px' })
+    if (earthStageRef.current) earthObserver.observe(earthStageRef.current)
+    return () => { window.removeEventListener('scroll', updateDepth); window.removeEventListener('resize', updateDepth); revealObserver.disconnect(); earthObserver.disconnect() }
   }, [])
 
   return (
@@ -65,35 +68,39 @@ export function LandingPage({ sceneCount, scenes, health, onEnter, onMethod }: P
           <div className="journey-gridlines" aria-hidden="true" />
           <div className="journey-copy reveal-lines">
             <span className="hero-overline"><i /> EARTH OBSERVATION · MADE REVIEWABLE</span>
-            <h1><span>See the signal.</span><span>Understand the</span><span className="hero-accent">evidence.</span></h1>
-            <p>Vyora brings source imagery, model estimates and human review into one clear workflow—without pretending an estimate is ground truth.</p>
+            <h1><span>Read the signal.</span><span>Keep the</span><span className="hero-accent">evidence.</span></h1>
+            <p>Satellite image interpretation with the source, model estimate and human review kept in the same frame.</p>
             <div className="journey-actions">
               <button className="button-primary" onClick={onEnter}>Explore the workspace <ArrowRight size={16} /></button>
               <a href="#approach">Discover the approach <ArrowDown size={14} /></a>
             </div>
             <div className="journey-footnote"><span>01 / 04</span><i /> LOCAL-FIRST IMAGE REVIEW</div>
           </div>
-          <div className="journey-earth-wrap" aria-label="Interactive Earth and spacecraft models">
-            <div className="journey-orbit orbit-one" aria-hidden="true" /><div className="journey-orbit orbit-two" aria-hidden="true" />
-            <div className="journey-earth">
-              <Suspense fallback={<div className="landing-earth-loading">Preparing the Earth model…</div>}>
-                <InteractiveEarth scrollStageRef={journeyRef} />
-              </Suspense>
-            </div>
-            <div className="journey-coordinate journey-coordinate-top">EARTH / 01 <span>ILLUSTRATIVE ORBITS</span></div>
-            <div className="journey-caption"><span className="caption-beacon" /> GOES + LANDSAT 8 · NASA 3D MODELS <small>Not a live tracking feed</small></div>
-            <div className="journey-parallax-chip chip-surface"><Layers3 size={13} /> SOURCE IMAGERY</div>
-            <div className="journey-parallax-chip chip-orbit"><Radar size={13} /> ORBITAL VIEW</div>
+          <div className="journey-satellite-wrap" aria-label="NASA GOES spacecraft 3D model">
+            <div className="satellite-rule satellite-rule-one" aria-hidden="true" />
+            <div className="satellite-rule satellite-rule-two" aria-hidden="true" />
+            <Suspense fallback={<div className="satellite-loading">Loading spacecraft model…</div>}>
+              <InteractiveSatellite />
+            </Suspense>
+            <span className="satellite-index">OBJECT / 01 <i /> GOES SPACECRAFT</span>
           </div>
           <div className="journey-scroll-indicator"><span>SCROLL TO EXPLORE</span><i /></div>
           <div className="journey-vignette" aria-hidden="true" />
         </div>
       </section>
 
+      <section className="landing-earth-section" id="earth-model" ref={earthStageRef} aria-label="Interactive Earth model">
+        <div className="earth-section-copy"><span className="section-kicker">INTERACTIVE 3D EARTH · VISUAL CONTEXT</span><h2>A closer look at<br /><em>the whole Earth.</em></h2><p>Rotate this 3D scene to explore the day, night and cloud layers. The spacecraft and orbital paths are illustrative models, not live positions or mission data.</p><div className="earth-section-credits"><span><i /> NASA Earth textures</span><span><i /> GOES + Landsat 8 3D models</span><span><i /> Illustrative paths · not to scale</span></div></div>
+        <div className="earth-section-visual">
+          {earthReady ? <Suspense fallback={<div className="earth-section-placeholder">Loading interactive Earth…</div>}><InteractiveEarth scrollStageRef={earthStageRef} /></Suspense> : <div className="earth-section-placeholder">3D Earth loads as you reach this section.</div>}
+          <span className="earth-section-coordinates">DRAG TO ROTATE <i /> SCROLL TO EXPLORE</span>
+        </div>
+      </section>
+
       <section className="landing-manifesto" id="approach">
         <div className="manifesto-index">01 <i /> THE VYORA APPROACH</div>
         <div className="manifesto-copy reveal-lines"><h2><span>Good analysis starts</span><span>with what you can see.</span></h2><p>Every result stays close to its source. Inspect the input, compare the returned estimate, and leave a note where another person can pick up the thread.</p></div>
-        <div className="manifesto-orbit-art" aria-hidden="true"><div className="manifesto-ring" /><span>V</span><i /><b /></div>
+        <div className="manifesto-proof" aria-label="Three review elements"><span><b>01</b> SOURCE IMAGE</span><span><b>02</b> MODEL ESTIMATE</span><span><b>03</b> HUMAN REVIEW</span></div>
       </section>
 
       <section className="landing-scene-section" id="scene-library" ref={carouselRef}>

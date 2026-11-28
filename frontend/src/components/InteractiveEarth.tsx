@@ -76,7 +76,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
     const sun = new THREE.DirectionalLight('#fff4df', 2.6)
     sun.position.set(-4.4, 2.7, 5.2)
     scene.add(sun)
-    const rim = new THREE.DirectionalLight('#9b82e7', 1.15)
+    const rim = new THREE.DirectionalLight('#8d80bc', .72)
     rim.position.set(3.5, -1.5, -4.2)
     scene.add(rim)
 
@@ -114,7 +114,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
       const material = earth.material as THREE.MeshStandardMaterial
       material.emissiveMap = nightTexture
       material.emissive.set('#c18b4b')
-      material.emissiveIntensity = .42
+      material.emissiveIntensity = .28
       material.needsUpdate = true
     })
 
@@ -140,7 +140,7 @@ export function InteractiveEarth({ scrollStageRef, enableScrollZoom = false }: P
         depthWrite: false,
         uniforms: { glowColor: { value: new THREE.Color('#8d84e8') } },
         vertexShader: `varying vec3 vNormal; varying vec3 vViewPosition; void main(){ vec4 mvPosition=modelViewMatrix*vec4(position,1.0); vNormal=normalize(normalMatrix*normal); vViewPosition=-mvPosition.xyz; gl_Position=projectionMatrix*mvPosition; }`,
-        fragmentShader: `uniform vec3 glowColor; varying vec3 vNormal; varying vec3 vViewPosition; void main(){ float rim=pow(1.0-max(dot(normalize(vNormal),normalize(vViewPosition)),0.0),2.5); gl_FragColor=vec4(glowColor, rim*.16); }`,
+        fragmentShader: `uniform vec3 glowColor; varying vec3 vNormal; varying vec3 vViewPosition; void main(){ float rim=pow(1.0-max(dot(normalize(vNormal),normalize(vViewPosition)),0.0),2.5); gl_FragColor=vec4(glowColor, rim*.1); }`,
       }),
     )
     earthRoot.add(atmosphere)

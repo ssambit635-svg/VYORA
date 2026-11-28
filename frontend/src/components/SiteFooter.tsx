@@ -17,7 +17,7 @@ export function SiteFooter({ runnerLabel, workspace = false, onNavigate }: Props
       <div className="site-footer-main">
         <div className="footer-about">
           <a className="footer-brand" href={workspace ? '#overview' : '#home'} onClick={workspace ? () => onNavigate?.('overview') : undefined} aria-label="Vyora home">
-            <img src="/assets/vyora-brand.svg" alt="Vyora" />
+            <img src="/assets/vyora-brand.png" alt="Vyora" />
           </a>
           <p>Local-first image review. Keep the source visible and the limits clear.</p>
           <span className="footer-scope">Research prototype · Not a warning product</span>

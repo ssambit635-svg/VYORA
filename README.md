@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/assets/vyora-brand.svg" alt="Vyora logo" width="180" height="49" />
+  <img src="frontend/public/assets/vyora-brand.png" alt="Vyora logo" width="180" height="49" />
 </p>
 
 <h1 align="center">VYORA</h1>
